@@ -19,11 +19,23 @@ package org.kurento.tutorial.rtpreceiver;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.kurento.client.CryptoSuite;
+import org.kurento.client.EventListener;
+import org.kurento.client.IceCandidate;
+import org.kurento.client.IceCandidateFoundEvent;
+import org.kurento.client.IceComponentStateChangeEvent;
+import org.kurento.client.IceGatheringDoneEvent;
+import org.kurento.client.KurentoClient;
+import org.kurento.client.MediaPipeline;
+import org.kurento.client.MediaProfileSpecType;
+import org.kurento.client.MediaType;
+import org.kurento.client.NewCandidatePairSelectedEvent;
+import org.kurento.client.OnKeySoftLimitEvent;
+import org.kurento.client.RecorderEndpoint;
+import org.kurento.client.RtpEndpoint;
+import org.kurento.client.SDES;
+import org.kurento.client.WebRtcEndpoint;
+import org.kurento.jsonrpc.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,62 +44,43 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 // Kurento client
-import org.kurento.client.BaseRtpEndpoint;
-import org.kurento.client.EventListener;
-import org.kurento.client.IceCandidate;
-import org.kurento.client.KurentoClient;
-import org.kurento.client.MediaPipeline;
-import org.kurento.client.RtpEndpoint;
-import org.kurento.client.WebRtcEndpoint;
-import org.kurento.jsonrpc.JsonUtils;
-
 // Kurento crypto
-import org.kurento.client.CryptoSuite;
-import org.kurento.client.SDES;
-
 // Kurento events
-import org.kurento.client.ConnectionStateChangedEvent;
-import org.kurento.client.ErrorEvent;
-import org.kurento.client.IceCandidateFoundEvent;
-import org.kurento.client.IceComponentStateChangeEvent;
-import org.kurento.client.IceGatheringDoneEvent;
-import org.kurento.client.MediaFlowInStateChangeEvent;
-import org.kurento.client.MediaFlowOutStateChangeEvent;
-import org.kurento.client.MediaStateChangedEvent;
-import org.kurento.client.MediaTranscodingStateChangeEvent;
-import org.kurento.client.NewCandidatePairSelectedEvent;
-import org.kurento.client.OnKeySoftLimitEvent;
 
 
 /**
  * Kurento Java Tutorial - Handler class.
  */
-public class Handler extends TextWebSocketHandler
-{
+public class Handler extends TextWebSocketHandler {
   private final Logger log = LoggerFactory.getLogger(Handler.class);
   private final Gson gson = new GsonBuilder().create();
 
-  private final ConcurrentHashMap<String, UserSession> users =
-      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, UserSession> users = new ConcurrentHashMap<>();
+
+  private static final String RECORDER_FILE_PATH = "file:///tmp/AttemptOneRecorded.mp4";
+  private EndpointUtils endpointUtils = new EndpointUtils();
+
 
   @Autowired
   private KurentoClient kurento;
 
   @Override
   public void afterConnectionClosed(final WebSocketSession session,
-      CloseStatus status) throws Exception
-  {
-    log.debug("[Handler::afterConnectionClosed] status: {}, sessionId: {}",
-        status, session.getId());
-
+                                    CloseStatus status) throws Exception {
+    log.debug("[Handler::afterConnectionClosed] status: {}, sessionId: {}", status, session.getId());
     stop(session);
   }
 
   @Override
   protected void handleTextMessage(WebSocketSession session,
-      TextMessage message) throws Exception
-  {
+                                   TextMessage message) throws Exception {
     JsonObject jsonMessage = gson.fromJson(message.getPayload(),
         JsonObject.class);
     String sessionId = session.getId();
@@ -120,150 +113,76 @@ public class Handler extends TextWebSocketHandler
 
   @Override
   public void handleTransportError(WebSocketSession session, Throwable ex)
-      throws Exception
-  {
+      throws Exception {
     log.error("[Handler::handleTransportError] Exception: {}, sessionId: {}",
         ex, session.getId());
   }
 
   // PROCESS_SDP_OFFER ---------------------------------------------------------
 
-  private void addBaseEventListeners(final WebSocketSession session,
-      BaseRtpEndpoint baseRtpEp, final String className)
-  {
-    log.info("[Handler::addBaseEventListeners] name: {}, class: {}, sessionId: {}",
-        baseRtpEp.getName(), className, session.getId());
-
-    // Event: Some error happened
-    baseRtpEp.addErrorListener(new EventListener<ErrorEvent>() {
-      @Override
-      public void onEvent(ErrorEvent ev) {
-        log.error("[{}::{}] source: {}, timestamp: {}, tags: {}, description: {}, errorCode: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getDescription(), ev.getErrorCode());
-        stop(session);
-      }
-    });
-
-    // Event: Media is flowing into this sink
-    baseRtpEp.addMediaFlowInStateChangeListener(
-        new EventListener<MediaFlowInStateChangeEvent>() {
-      @Override
-      public void onEvent(MediaFlowInStateChangeEvent ev) {
-        log.info("[{}::{}] source: {}, timestamp: {}, tags: {}, state: {}, padName: {}, mediaType: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getState(), ev.getPadName(), ev.getMediaType());
-      }
-    });
-
-    // Event: Media is flowing out of this source
-    baseRtpEp.addMediaFlowOutStateChangeListener(
-        new EventListener<MediaFlowOutStateChangeEvent>() {
-      @Override
-      public void onEvent(MediaFlowOutStateChangeEvent ev) {
-        log.info("[{}::{}] source: {}, timestamp: {}, tags: {}, state: {}, padName: {}, mediaType: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getState(), ev.getPadName(), ev.getMediaType());
-      }
-    });
-
-    // Event: [TODO write meaning of this event]
-    baseRtpEp.addConnectionStateChangedListener(
-        new EventListener<ConnectionStateChangedEvent>() {
-      @Override
-      public void onEvent(ConnectionStateChangedEvent ev) {
-        log.info("[{}::{}] source: {}, timestamp: {}, tags: {}, oldState: {}, newState: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getOldState(), ev.getNewState());
-      }
-    });
-
-    // Event: [TODO write meaning of this event]
-    baseRtpEp.addMediaStateChangedListener(
-        new EventListener<MediaStateChangedEvent>() {
-      @Override
-      public void onEvent(MediaStateChangedEvent ev) {
-        log.info("[{}::{}] source: {}, timestamp: {}, tags: {}, oldState: {}, newState: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getOldState(), ev.getNewState());
-      }
-    });
-
-    // Event: This element will (or will not) perform media transcoding
-    baseRtpEp.addMediaTranscodingStateChangeListener(
-        new EventListener<MediaTranscodingStateChangeEvent>() {
-      @Override
-      public void onEvent(MediaTranscodingStateChangeEvent ev) {
-        log.info("[{}::{}] source: {}, timestamp: {}, tags: {}, state: {}, binName: {}, mediaType: {}",
-            className, ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getState(), ev.getBinName(), ev.getMediaType());
-      }
-    });
-  }
 
   private void addWebRtcEventListeners(final WebSocketSession session,
-      final WebRtcEndpoint webRtcEp)
-  {
+                                       final WebRtcEndpoint webRtcEp) {
     log.info("[Handler::addWebRtcEventListeners] name: {}, sessionId: {}",
         webRtcEp.getName(), session.getId());
 
     // Event: The ICE backend found a local candidate during Trickle ICE
     webRtcEp.addIceCandidateFoundListener(
         new EventListener<IceCandidateFoundEvent>() {
-      @Override
-      public void onEvent(IceCandidateFoundEvent ev) {
-        log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, candidate: {}",
-            ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), JsonUtils.toJsonObject(ev.getCandidate()));
+          @Override
+          public void onEvent(IceCandidateFoundEvent ev) {
+            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, candidate: {}",
+                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
+                ev.getTags(), JsonUtils.toJsonObject(ev.getCandidate()));
 
-        JsonObject message = new JsonObject();
-        message.addProperty("id", "ADD_ICE_CANDIDATE");
-        message.addProperty("webRtcEpId", webRtcEp.getId());
-        message.add("candidate", JsonUtils.toJsonObject(ev.getCandidate()));
-        sendMessage(session, message.toString());
-      }
-    });
+            JsonObject message = new JsonObject();
+            message.addProperty("id", "ADD_ICE_CANDIDATE");
+            message.addProperty("webRtcEpId", webRtcEp.getId());
+            message.add("candidate", JsonUtils.toJsonObject(ev.getCandidate()));
+            endpointUtils.sendMessage(session, message.toString());
+          }
+        });
 
     // Event: The ICE backend changed state
     webRtcEp.addIceComponentStateChangeListener(
         new EventListener<IceComponentStateChangeEvent>() {
-      @Override
-      public void onEvent(IceComponentStateChangeEvent ev) {
-        log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, streamId: {}, componentId: {}, state: {}",
-            ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getStreamId(), ev.getComponentId(), ev.getState());
-      }
-    });
+          @Override
+          public void onEvent(IceComponentStateChangeEvent ev) {
+            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, streamId: {}, componentId: {}, " +
+                    "state: {}",
+                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
+                ev.getTags(), ev.getStreamId(), ev.getComponentId(), ev.getState());
+          }
+        });
 
     // Event: The ICE backend finished gathering ICE candidates
     webRtcEp.addIceGatheringDoneListener(
         new EventListener<IceGatheringDoneEvent>() {
-      @Override
-      public void onEvent(IceGatheringDoneEvent ev) {
-        log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}",
-            ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags());
-      }
-    });
+          @Override
+          public void onEvent(IceGatheringDoneEvent ev) {
+            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}",
+                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
+                ev.getTags());
+          }
+        });
 
     // Event: The ICE backend selected a new pair of ICE candidates for use
     webRtcEp.addNewCandidatePairSelectedListener(
         new EventListener<NewCandidatePairSelectedEvent>() {
-      @Override
-      public void onEvent(NewCandidatePairSelectedEvent ev) {
-        log.info("[WebRtcEndpoint::{}] name: {}, timestamp: {}, tags: {}, streamId: {}, local: {}, remote: {}",
-            ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-            ev.getTags(), ev.getCandidatePair().getStreamID(),
-            ev.getCandidatePair().getLocalCandidate(),
-            ev.getCandidatePair().getRemoteCandidate());
-      }
-    });
+          @Override
+          public void onEvent(NewCandidatePairSelectedEvent ev) {
+            log.info("[WebRtcEndpoint::{}] name: {}, timestamp: {}, tags: {}, streamId: {}, local: {}, remote: {}",
+                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
+                ev.getTags(), ev.getCandidatePair().getStreamID(),
+                ev.getCandidatePair().getLocalCandidate(),
+                ev.getCandidatePair().getRemoteCandidate());
+          }
+        });
   }
 
   private void initWebRtcEndpoint(final WebSocketSession session,
-      final WebRtcEndpoint webRtcEp, String sdpOffer)
-  {
-    addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
+                                  final WebRtcEndpoint webRtcEp, String sdpOffer) {
+    endpointUtils.addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
     addWebRtcEventListeners(session, webRtcEp);
 
     /*
@@ -289,19 +208,17 @@ public class Handler extends TextWebSocketHandler
     JsonObject message = new JsonObject();
     message.addProperty("id", "PROCESS_SDP_ANSWER");
     message.addProperty("sdpAnswer", sdpAnswer);
-    sendMessage(session, message.toString());
+    endpointUtils.sendMessage(session, message.toString());
   }
 
-  private void startWebRtcEndpoint(WebRtcEndpoint webRtcEp)
-  {
+  private void startWebRtcEndpoint(WebRtcEndpoint webRtcEp) {
     // Calling gatherCandidates() is when the Endpoint actually starts working.
     // In this tutorial, this is emphasized for demonstration purposes by
     // leaving the ICE candidate gathering in its own method.
     webRtcEp.gatherCandidates();
   }
 
-  private RtpEndpoint makeRtpEndpoint(MediaPipeline pipeline, Boolean useSrtp)
-  {
+  private RtpEndpoint makeRtpEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
     if (!useSrtp) {
       return new RtpEndpoint.Builder(pipeline).build();
     }
@@ -335,23 +252,22 @@ public class Handler extends TextWebSocketHandler
   that KMS will use to listen for packets.
   */
   private void startRtpEndpoint(final WebSocketSession session,
-      RtpEndpoint rtpEp, Boolean useComedia, Boolean useSrtp)
-  {
+                                RtpEndpoint rtpEp, Boolean useComedia, Boolean useSrtp) {
     log.info("[Handler::startRtpEndpoint] Configure RtpEndpoint, port discovery: {}, SRTP: {}",
         useComedia, useSrtp);
 
-    addBaseEventListeners(session, rtpEp, "RtpEndpoint");
+    endpointUtils.addBaseEventListeners(session, rtpEp, "RtpEndpoint");
 
     // Event: The SRTP key is about to expire
     rtpEp.addOnKeySoftLimitListener(
         new EventListener<OnKeySoftLimitEvent>() {
-      @Override
-      public void onEvent(OnKeySoftLimitEvent ev) {
-        log.info("[RtpEndpoint::{}] source: {}, timestamp: {}, tags: {}, mediaType: {}",
-            ev.getType(), ev.getSource(), ev.getTimestamp(), ev.getTags(),
-            ev.getMediaType());
-      }
-    });
+          @Override
+          public void onEvent(OnKeySoftLimitEvent ev) {
+            log.info("[RtpEndpoint::{}] source: {}, timestamp: {}, tags: {}, mediaType: {}",
+                ev.getType(), ev.getSource(), ev.getTimestamp(), ev.getTags(),
+                ev.getMediaType());
+          }
+        });
 
     // ---- RTP configuration BEGIN ----
     // Set the appropriate values for your setup
@@ -422,29 +338,29 @@ Some default values are defined by different RFCs:
 
     String rtpSdpOffer =
         "v=0\r\n"
-        + "o=- 0 0 IN IP4 " + senderIp + "\r\n"
-        + "s=Kurento Tutorial - RTP Receiver\r\n"
-        + "c=IN IP4 " + senderIp + "\r\n"
-        + "t=0 0\r\n";
+            + "o=- 0 0 IN IP4 " + senderIp + "\r\n"
+            + "s=Kurento Tutorial - RTP Receiver\r\n"
+            + "c=IN IP4 " + senderIp + "\r\n"
+            + "t=0 0\r\n";
 
     if (useAudio) {
       rtpSdpOffer +=
           "m=audio " + senderRtpPortA + " RTP/AVPF 96\r\n"
-          + "a=rtpmap:96 opus/48000/2\r\n"
-          + "a=sendonly\r\n"
-          + sdpComediaAttr
-          + "a=ssrc:" + senderSsrcA + " cname:" + senderCname + "\r\n";
+              + "a=rtpmap:96 opus/48000/2\r\n"
+              + "a=sendonly\r\n"
+              + sdpComediaAttr
+              + "a=ssrc:" + senderSsrcA + " cname:" + senderCname + "\r\n";
     }
 
     rtpSdpOffer +=
         "m=video " + senderRtpPortV + " " + senderProtocol + " 103\r\n"
-        + sdpCryptoAttr
-        + "a=rtpmap:103 " + senderCodecV + "/90000\r\n"
-        + "a=rtcp-fb:103 goog-remb\r\n"
-        + "a=sendonly\r\n"
-        + sdpComediaAttr
-        + "a=ssrc:" + senderSsrcV + " cname:" + senderCname + "\r\n"
-        + "";
+            + sdpCryptoAttr
+            + "a=rtpmap:103 " + senderCodecV + "/90000\r\n"
+            + "a=rtcp-fb:103 goog-remb\r\n"
+            + "a=sendonly\r\n"
+            + sdpComediaAttr
+            + "a=ssrc:" + senderSsrcV + " cname:" + senderCname + "\r\n"
+            + "";
 
     // Send the SDP Offer to KMS, and get its negotiated SDP Answer
     String rtpSdpAnswer = rtpEp.processOffer(rtpSdpOffer);
@@ -457,7 +373,8 @@ Some default values are defined by different RFCs:
     // Parse SDP Answer
     // NOTE: No error checking; this code assumes that the SDP Answer from KMS
     // is always well formed.
-    Pattern p; Matcher m;
+    Pattern p;
+    Matcher m;
 
     int kmsRtpPortA = 0;
     int senderRtcpPortA = 0;
@@ -495,6 +412,32 @@ Some default values are defined by different RFCs:
     }
     msgConnInfo += String.format(
         "* KMS listens for Video RTP at port: %d\n", kmsRtpPortV);
+
+    log.warn("\n\n\n use below >>>>> \n\n\nPEER_A=" + kmsRtpPortA + " PEER_V=" + kmsRtpPortV + " PEER_IP=localhost" +
+        " \\\n" +
+        "SELF_PATH=\"video.mp4\" \\\n" +
+        "SELF_A=5006 SELF_ASSRC=445566 \\\n" +
+        "SELF_V=5004 SELF_VSSRC=112233 \\\n" +
+        "bash -c 'gst-launch-1.0 -e \\\n" +
+        "  rtpbin name=r sdes=\"application/x-rtp-source-sdes,cname=(string)\\\"user\\@example.com\\\"\" \\\n" +
+        "  filesrc location=\"$SELF_PATH\" ! decodebin name=d \\\n" +
+        "  d. ! queue ! audioconvert ! opusenc \\\n" +
+        "    ! rtpopuspay ! \"application/x-rtp,payload=(int)96,clock-rate=(int)48000,ssrc=(uint)$SELF_ASSRC\" \\\n" +
+        "    ! r.send_rtp_sink_0 \\\n" +
+        "  d. ! queue ! videoconvert ! x264enc tune=zerolatency \\\n" +
+        "    ! rtph264pay ! \"application/x-rtp,payload=(int)103,clock-rate=(int)90000,ssrc=(uint)$SELF_VSSRC\" \\\n" +
+        "    ! r.send_rtp_sink_1 \\\n" +
+        "  r.send_rtp_src_0 ! udpsink host=$PEER_IP port=$PEER_A bind-port=$SELF_A \\\n" +
+        "  r.send_rtcp_src_0 ! udpsink host=$PEER_IP port=$((PEER_A+1)) bind-port=$((SELF_A+1)) sync=false " +
+        "async=false \\\n" +
+        "  udpsrc port=$((SELF_A+1)) ! r.recv_rtcp_sink_0 \\\n" +
+        "  r.send_rtp_src_1 ! udpsink host=$PEER_IP port=$PEER_V bind-port=$SELF_V \\\n" +
+        "  r.send_rtcp_src_1 ! udpsink host=$PEER_IP port=$((PEER_V+1)) bind-port=$((SELF_V+1)) sync=false " +
+        "async=false \\\n" +
+        "  udpsrc port=$((SELF_V+1)) ! tee name=t \\\n" +
+        "    t. ! queue ! r.recv_rtcp_sink_1 \\\n" +
+        "    t. ! queue ! fakesink dump=true async=false'\n\n\n use above >>>>>");
+
     if (useSrtp) {
       msgConnInfo += String.format(
           "* KMS uses Video SSRC: %s\n", kmsSsrcV);
@@ -524,19 +467,19 @@ Some default values are defined by different RFCs:
       JsonObject message = new JsonObject();
       message.addProperty("id", "SHOW_CONN_INFO");
       message.addProperty("text", msgConnInfo);
-      sendMessage(session, message.toString());
+      endpointUtils.sendMessage(session, message.toString());
     }
     {
       JsonObject message = new JsonObject();
       message.addProperty("id", "SHOW_SDP_ANSWER");
       message.addProperty("text", rtpSdpAnswer);
-      sendMessage(session, message.toString());
+      endpointUtils.sendMessage(session, message.toString());
     }
   }
 
+
   private void handleProcessSdpOffer(final WebSocketSession session,
-      JsonObject jsonMessage)
-  {
+                                     JsonObject jsonMessage) {
     // ---- Session handling
 
     String sessionId = session.getId();
@@ -554,17 +497,26 @@ Some default values are defined by different RFCs:
     final MediaPipeline pipeline = kurento.createMediaPipeline();
     user.setMediaPipeline(pipeline);
 
+
+    RecorderEndpoint recorder = new RecorderEndpoint.Builder(pipeline, RECORDER_FILE_PATH)
+        .withMediaProfile(MediaProfileSpecType.MP4).build();
     final WebRtcEndpoint webRtcEp =
         new WebRtcEndpoint.Builder(pipeline).build();
-    user.setWebRtcEndpoint(webRtcEp);
+    user.setWebRtcEp(webRtcEp);
+
+    endpointUtils.addRecorderListeners(recorder);
+
 
     Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
     final RtpEndpoint rtpEp = makeRtpEndpoint(pipeline, useSrtp);
-    user.setRtpEndpoint(rtpEp);
+    user.setRtpEp(rtpEp);
 
+    endpointUtils.addRtpListeners(rtpEp);
+    endpointUtils.addWebRtpListeners(webRtcEp);
 
     // ---- Endpoint configuration
-
+    rtpEp.connect(recorder, MediaType.VIDEO);
+    rtpEp.connect(recorder, MediaType.AUDIO);
     rtpEp.connect(webRtcEp);
 
     String sdpOffer = jsonMessage.get("sdpOffer").getAsString();
@@ -576,19 +528,18 @@ Some default values are defined by different RFCs:
 
 
     // ---- Debug
-    // String pipelineDot = pipeline.getGstreamerDot();
-    // try (PrintWriter out = new PrintWriter("pipeline.dot")) {
-    //   out.println(pipelineDot);
-    // } catch (IOException ex) {
-    //   log.error("[Handler::start] Exception: {}", ex.getMessage());
-    // }
+    String pipelineDot = pipeline.getGstreamerDot();
+    try (PrintWriter out = new PrintWriter("pipeline.dot")) {
+      out.println("------------------- " + pipelineDot);
+    } catch (IOException ex) {
+      log.error("[Handler::start] Exception: {}", ex.getMessage());
+    }
   }
 
   // ADD_ICE_CANDIDATE ---------------------------------------------------------
 
   private void handleAddIceCandidate(final WebSocketSession session,
-      JsonObject jsonMessage)
-  {
+                                     JsonObject jsonMessage) {
     String sessionId = session.getId();
     UserSession user = users.get(sessionId);
 
@@ -596,27 +547,25 @@ Some default values are defined by different RFCs:
       JsonObject jsonCandidate = jsonMessage.get("candidate").getAsJsonObject();
       IceCandidate candidate =
           new IceCandidate(jsonCandidate.get("candidate").getAsString(),
-          jsonCandidate.get("sdpMid").getAsString(),
-          jsonCandidate.get("sdpMLineIndex").getAsInt());
+              jsonCandidate.get("sdpMid").getAsString(),
+              jsonCandidate.get("sdpMLineIndex").getAsInt());
 
-      WebRtcEndpoint webRtcEp = user.getWebRtcEndpoint();
+      WebRtcEndpoint webRtcEp = user.getWebRtcEp();
       webRtcEp.addIceCandidate(candidate);
     }
   }
 
   // STOP ----------------------------------------------------------------------
 
-  public void sendPlayEnd(final WebSocketSession session)
-  {
+  public void sendPlayEnd(final WebSocketSession session) {
     if (users.containsKey(session.getId())) {
       JsonObject message = new JsonObject();
       message.addProperty("id", "END_PLAYBACK");
-      sendMessage(session, message.toString());
+      endpointUtils.sendMessage(session, message.toString());
     }
   }
 
-  private void stop(final WebSocketSession session)
-  {
+  private void stop(final WebSocketSession session) {
     log.info("[Handler::stop]");
 
     // Update the UI
@@ -635,35 +584,19 @@ Some default values are defined by different RFCs:
   }
 
   private void handleStop(final WebSocketSession session,
-      JsonObject jsonMessage)
-  {
+                          JsonObject jsonMessage) {
     stop(session);
   }
 
   // ---------------------------------------------------------------------------
 
-  private void sendError(final WebSocketSession session, String errMsg)
-  {
+  private void sendError(final WebSocketSession session, String errMsg) {
     if (users.containsKey(session.getId())) {
       JsonObject message = new JsonObject();
       message.addProperty("id", "ERROR");
       message.addProperty("message", errMsg);
-      sendMessage(session, message.toString());
+      endpointUtils.sendMessage(session, message.toString());
     }
   }
 
-  private synchronized void sendMessage(final WebSocketSession session,
-      String message)
-  {
-    if (!session.isOpen()) {
-      log.error("[Handler::sendMessage] WebSocket session is closed");
-      return;
-    }
-
-    try {
-      session.sendMessage(new TextMessage(message));
-    } catch (IOException ex) {
-      log.error("[Handler::sendMessage] Exception: {}", ex.getMessage());
-    }
-  }
 }
