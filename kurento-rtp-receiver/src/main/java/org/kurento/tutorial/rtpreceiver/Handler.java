@@ -21,21 +21,15 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import org.kurento.client.CryptoSuite;
 import org.kurento.client.EventListener;
-import org.kurento.client.IceCandidate;
-import org.kurento.client.IceCandidateFoundEvent;
-import org.kurento.client.IceComponentStateChangeEvent;
-import org.kurento.client.IceGatheringDoneEvent;
 import org.kurento.client.KurentoClient;
 import org.kurento.client.MediaPipeline;
 import org.kurento.client.MediaProfileSpecType;
 import org.kurento.client.MediaType;
-import org.kurento.client.NewCandidatePairSelectedEvent;
 import org.kurento.client.OnKeySoftLimitEvent;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RtpEndpoint;
 import org.kurento.client.SDES;
 import org.kurento.client.WebRtcEndpoint;
-import org.kurento.jsonrpc.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,7 +89,7 @@ public class Handler extends TextWebSocketHandler {
           handleProcessSdpOffer(session, jsonMessage);
           break;
         case "ADD_ICE_CANDIDATE":
-          handleAddIceCandidate(session, jsonMessage);
+          endpointUtils.handleAddIceCandidate(session, jsonMessage, users);
           break;
         case "STOP":
           handleStop(session, jsonMessage);
@@ -121,69 +115,11 @@ public class Handler extends TextWebSocketHandler {
   // PROCESS_SDP_OFFER ---------------------------------------------------------
 
 
-  private void addWebRtcEventListeners(final WebSocketSession session,
-                                       final WebRtcEndpoint webRtcEp) {
-    log.info("[Handler::addWebRtcEventListeners] name: {}, sessionId: {}",
-        webRtcEp.getName(), session.getId());
-
-    // Event: The ICE backend found a local candidate during Trickle ICE
-    webRtcEp.addIceCandidateFoundListener(
-        new EventListener<IceCandidateFoundEvent>() {
-          @Override
-          public void onEvent(IceCandidateFoundEvent ev) {
-            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, candidate: {}",
-                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-                ev.getTags(), JsonUtils.toJsonObject(ev.getCandidate()));
-
-            JsonObject message = new JsonObject();
-            message.addProperty("id", "ADD_ICE_CANDIDATE");
-            message.addProperty("webRtcEpId", webRtcEp.getId());
-            message.add("candidate", JsonUtils.toJsonObject(ev.getCandidate()));
-            endpointUtils.sendMessage(session, message.toString());
-          }
-        });
-
-    // Event: The ICE backend changed state
-    webRtcEp.addIceComponentStateChangeListener(
-        new EventListener<IceComponentStateChangeEvent>() {
-          @Override
-          public void onEvent(IceComponentStateChangeEvent ev) {
-            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}, streamId: {}, componentId: {}, " +
-                    "state: {}",
-                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-                ev.getTags(), ev.getStreamId(), ev.getComponentId(), ev.getState());
-          }
-        });
-
-    // Event: The ICE backend finished gathering ICE candidates
-    webRtcEp.addIceGatheringDoneListener(
-        new EventListener<IceGatheringDoneEvent>() {
-          @Override
-          public void onEvent(IceGatheringDoneEvent ev) {
-            log.debug("[WebRtcEndpoint::{}] source: {}, timestamp: {}, tags: {}",
-                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-                ev.getTags());
-          }
-        });
-
-    // Event: The ICE backend selected a new pair of ICE candidates for use
-    webRtcEp.addNewCandidatePairSelectedListener(
-        new EventListener<NewCandidatePairSelectedEvent>() {
-          @Override
-          public void onEvent(NewCandidatePairSelectedEvent ev) {
-            log.info("[WebRtcEndpoint::{}] name: {}, timestamp: {}, tags: {}, streamId: {}, local: {}, remote: {}",
-                ev.getType(), ev.getSource().getName(), ev.getTimestamp(),
-                ev.getTags(), ev.getCandidatePair().getStreamID(),
-                ev.getCandidatePair().getLocalCandidate(),
-                ev.getCandidatePair().getRemoteCandidate());
-          }
-        });
-  }
 
   private void initWebRtcEndpoint(final WebSocketSession session,
                                   final WebRtcEndpoint webRtcEp, String sdpOffer) {
     endpointUtils.addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
-    addWebRtcEventListeners(session, webRtcEp);
+    endpointUtils.addWebRtcEventListeners(session, webRtcEp);
 
     /*
     OPTIONAL: Force usage of an Application-specific STUN server.
@@ -536,24 +472,6 @@ Some default values are defined by different RFCs:
     }
   }
 
-  // ADD_ICE_CANDIDATE ---------------------------------------------------------
-
-  private void handleAddIceCandidate(final WebSocketSession session,
-                                     JsonObject jsonMessage) {
-    String sessionId = session.getId();
-    UserSession user = users.get(sessionId);
-
-    if (user != null) {
-      JsonObject jsonCandidate = jsonMessage.get("candidate").getAsJsonObject();
-      IceCandidate candidate =
-          new IceCandidate(jsonCandidate.get("candidate").getAsString(),
-              jsonCandidate.get("sdpMid").getAsString(),
-              jsonCandidate.get("sdpMLineIndex").getAsInt());
-
-      WebRtcEndpoint webRtcEp = user.getWebRtcEp();
-      webRtcEp.addIceCandidate(candidate);
-    }
-  }
 
   // STOP ----------------------------------------------------------------------
 
