@@ -19,6 +19,7 @@ package org.kurento.tutorial.rtpreceiver;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.kurento.client.EventListener;
 import org.kurento.client.KurentoClient;
 import org.kurento.client.MediaPipeline;
@@ -56,7 +57,9 @@ public class Handler extends TextWebSocketHandler {
 
   private final ConcurrentHashMap<String, UserSession> users = new ConcurrentHashMap<>();
 
-  private static final String RECORDER_FILE_PATH = "file:///tmp/AttemptOneRecorded.mp4";
+  private static final String RECORDER_BASE_FILE_PATH = "file:///tmp/";
+  private static final String RECORDER_FILE_EXT = "-video.mp4";
+
   private EndpointUtils endpointUtils = new EndpointUtils();
 
 
@@ -77,7 +80,7 @@ public class Handler extends TextWebSocketHandler {
         JsonObject.class);
     String sessionId = session.getId();
 
-    log.debug("[Handler::handleTextMessage] {}, sessionId: {}",
+    log.info("[Handler::handleTextMessage] {}, sessionId: {}",
         jsonMessage, sessionId);
 
     log.info("-------------------------------" + users.size());
@@ -92,6 +95,12 @@ public class Handler extends TextWebSocketHandler {
           break;
         case "STOP":
           endpointUtils.handleStop(session, jsonMessage, users);
+          break;
+        case "START_REC":
+          endpointUtils.handleStartRec(session, jsonMessage, users);
+          break;
+        case "STOP_REC":
+          endpointUtils.handleStopRec(session, jsonMessage, users);
           break;
         default:
           endpointUtils.sendError(session, "Invalid message, id: " + messageId, users);
@@ -114,6 +123,10 @@ public class Handler extends TextWebSocketHandler {
   // PROCESS_SDP_OFFER ---------------------------------------------------------
 
 
+  private String getRandomFileName() {
+    String fileName = RandomStringUtils.randomAlphanumeric(10);
+    return RECORDER_BASE_FILE_PATH + fileName + RECORDER_FILE_EXT;
+  }
 
 
   /*
@@ -370,10 +383,9 @@ Some default values are defined by different RFCs:
     user.setMediaPipeline(pipeline);
 
 
-    RecorderEndpoint recorder = new RecorderEndpoint.Builder(pipeline, RECORDER_FILE_PATH)
+    RecorderEndpoint recorder = new RecorderEndpoint.Builder(pipeline, getRandomFileName())
         .withMediaProfile(MediaProfileSpecType.MP4).build();
-    final WebRtcEndpoint webRtcEp =
-        new WebRtcEndpoint.Builder(pipeline).build();
+    final WebRtcEndpoint webRtcEp = new WebRtcEndpoint.Builder(pipeline).build();
     user.setWebRtcEp(webRtcEp);
 
     endpointUtils.addRecorderListeners(recorder);

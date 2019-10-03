@@ -355,6 +355,21 @@ public class EndpointUtils {
     stop(session, users);
   }
 
+  //todo: connect with frontend
+  public void handleStartRec(final WebSocketSession session,
+                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+    String sessionId = session.getId();
+    UserSession user = users.get(sessionId);
+    user.getRecorder().record();
+  }
+
+  public void handleStopRec(final WebSocketSession session,
+                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+    String sessionId = session.getId();
+    UserSession user = users.get(sessionId);
+    user.getRecorder().stopAndWait();
+  }
+
   // ---------------------------------------------------------------------------
 
   public void sendError(final WebSocketSession session, String errMsg, ConcurrentHashMap<String, UserSession> users) {
