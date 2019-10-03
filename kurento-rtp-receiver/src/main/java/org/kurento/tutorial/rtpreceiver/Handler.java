@@ -19,7 +19,6 @@ package org.kurento.tutorial.rtpreceiver;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import org.kurento.client.CryptoSuite;
 import org.kurento.client.EventListener;
 import org.kurento.client.KurentoClient;
 import org.kurento.client.MediaPipeline;
@@ -28,7 +27,6 @@ import org.kurento.client.MediaType;
 import org.kurento.client.OnKeySoftLimitEvent;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RtpEndpoint;
-import org.kurento.client.SDES;
 import org.kurento.client.WebRtcEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,7 +67,7 @@ public class Handler extends TextWebSocketHandler {
   public void afterConnectionClosed(final WebSocketSession session,
                                     CloseStatus status) throws Exception {
     log.debug("[Handler::afterConnectionClosed] status: {}, sessionId: {}", status, session.getId());
-    stop(session);
+    endpointUtils.stop(session, users);
   }
 
   @Override
@@ -82,6 +80,7 @@ public class Handler extends TextWebSocketHandler {
     log.debug("[Handler::handleTextMessage] {}, sessionId: {}",
         jsonMessage, sessionId);
 
+    log.info("-------------------------------" + users.size());
     try {
       String messageId = jsonMessage.get("id").getAsString();
       switch (messageId) {
@@ -92,16 +91,16 @@ public class Handler extends TextWebSocketHandler {
           endpointUtils.handleAddIceCandidate(session, jsonMessage, users);
           break;
         case "STOP":
-          handleStop(session, jsonMessage);
+          endpointUtils.handleStop(session, jsonMessage, users);
           break;
         default:
-          sendError(session, "Invalid message, id: " + messageId);
+          endpointUtils.sendError(session, "Invalid message, id: " + messageId, users);
           break;
       }
     } catch (Throwable ex) {
       log.error("[Handler::handleTextMessage] Exception: {}, sessionId: {}",
           ex, sessionId);
-      sendError(session, "Exception: " + ex.getMessage());
+      endpointUtils.sendError(session, "Exception: " + ex.getMessage(), users);
     }
   }
 
@@ -116,69 +115,6 @@ public class Handler extends TextWebSocketHandler {
 
 
 
-  private void initWebRtcEndpoint(final WebSocketSession session,
-                                  final WebRtcEndpoint webRtcEp, String sdpOffer) {
-    endpointUtils.addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
-    endpointUtils.addWebRtcEventListeners(session, webRtcEp);
-
-    /*
-    OPTIONAL: Force usage of an Application-specific STUN server.
-    Usually this is configured globally in KMS WebRTC settings file:
-    /etc/kurento/modules/kurento/WebRtcEndpoint.conf.ini
-
-    But it can also be configured per-application, as shown:
-
-    log.info("[Handler::initWebRtcEndpoint] Using STUN server: 193.147.51.12:3478");
-    webRtcEp.setStunServerAddress("193.147.51.12");
-    webRtcEp.setStunServerPort(3478);
-    */
-
-    // Process the SDP Offer to generate an SDP Answer
-    String sdpAnswer = webRtcEp.processOffer(sdpOffer);
-
-    log.info("[Handler::initWebRtcEndpoint] name: {}, SDP Offer from browser to KMS:\n{}",
-        webRtcEp.getName(), sdpOffer);
-    log.info("[Handler::initWebRtcEndpoint] name: {}, SDP Answer from KMS to browser:\n{}",
-        webRtcEp.getName(), sdpAnswer);
-
-    JsonObject message = new JsonObject();
-    message.addProperty("id", "PROCESS_SDP_ANSWER");
-    message.addProperty("sdpAnswer", sdpAnswer);
-    endpointUtils.sendMessage(session, message.toString());
-  }
-
-  private void startWebRtcEndpoint(WebRtcEndpoint webRtcEp) {
-    // Calling gatherCandidates() is when the Endpoint actually starts working.
-    // In this tutorial, this is emphasized for demonstration purposes by
-    // leaving the ICE candidate gathering in its own method.
-    webRtcEp.gatherCandidates();
-  }
-
-  private RtpEndpoint makeRtpEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
-    if (!useSrtp) {
-      return new RtpEndpoint.Builder(pipeline).build();
-    }
-
-    // ---- SRTP configuration BEGIN ----
-    // This is used by KMS to encrypt its SRTP/SRTCP packets.
-    // Encryption key used by receiver (ASCII): "4321ZYXWVUTSRQPONMLKJIHGFEDCBA"
-    // In Base64: "NDMyMVpZWFdWVVRTUlFQT05NTEtKSUhHRkVEQ0JB"
-    CryptoSuite srtpCrypto = CryptoSuite.AES_128_CM_HMAC_SHA1_80;
-    // CryptoSuite crypto = CryptoSuite.AES_256_CM_HMAC_SHA1_80;
-
-    // You can provide the SRTP Master Key in either plain text or Base64.
-    // The second form allows providing binary, non-ASCII keys.
-    String srtpMasterKeyAscii = "4321ZYXWVUTSRQPONMLKJIHGFEDCBA";
-    // String srtpMasterKeyBase64 = "NDMyMVpZWFdWVVRTUlFQT05NTEtKSUhHRkVEQ0JB";
-    // ---- SRTP configuration END ----
-
-    SDES sdes = new SDES();
-    sdes.setCrypto(srtpCrypto);
-    sdes.setKey(srtpMasterKeyAscii);
-    // sdes.setKeyBase64(srtpMasterKeyBase64);
-
-    return new RtpEndpoint.Builder(pipeline).withCrypto(sdes).build();
-  }
 
   /*
   RtpEndpoint configuration.
@@ -444,7 +380,7 @@ Some default values are defined by different RFCs:
 
 
     Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
-    final RtpEndpoint rtpEp = makeRtpEndpoint(pipeline, useSrtp);
+    final RtpEndpoint rtpEp = endpointUtils.makeRtpEndpoint(pipeline, useSrtp);
     user.setRtpEp(rtpEp);
 
     endpointUtils.addRtpListeners(rtpEp);
@@ -456,8 +392,8 @@ Some default values are defined by different RFCs:
     rtpEp.connect(webRtcEp);
 
     String sdpOffer = jsonMessage.get("sdpOffer").getAsString();
-    initWebRtcEndpoint(session, webRtcEp, sdpOffer);
-    startWebRtcEndpoint(webRtcEp);
+    endpointUtils.initWebRtcEndpoint(session, webRtcEp, sdpOffer);
+    endpointUtils.startWebRtcEndpoint(webRtcEp);
 
     Boolean useComedia = jsonMessage.get("useComedia").getAsBoolean();
     startRtpEndpoint(session, rtpEp, useComedia, useSrtp);
@@ -473,48 +409,5 @@ Some default values are defined by different RFCs:
   }
 
 
-  // STOP ----------------------------------------------------------------------
-
-  public void sendPlayEnd(final WebSocketSession session) {
-    if (users.containsKey(session.getId())) {
-      JsonObject message = new JsonObject();
-      message.addProperty("id", "END_PLAYBACK");
-      endpointUtils.sendMessage(session, message.toString());
-    }
-  }
-
-  private void stop(final WebSocketSession session) {
-    log.info("[Handler::stop]");
-
-    // Update the UI
-    sendPlayEnd(session);
-
-    // Remove the user session and release all resources
-    String sessionId = session.getId();
-    UserSession user = users.remove(sessionId);
-    if (user != null) {
-      MediaPipeline mediaPipeline = user.getMediaPipeline();
-      if (mediaPipeline != null) {
-        log.info("[Handler::stop] Release the Media Pipeline");
-        mediaPipeline.release();
-      }
-    }
-  }
-
-  private void handleStop(final WebSocketSession session,
-                          JsonObject jsonMessage) {
-    stop(session);
-  }
-
-  // ---------------------------------------------------------------------------
-
-  private void sendError(final WebSocketSession session, String errMsg) {
-    if (users.containsKey(session.getId())) {
-      JsonObject message = new JsonObject();
-      message.addProperty("id", "ERROR");
-      message.addProperty("message", errMsg);
-      endpointUtils.sendMessage(session, message.toString());
-    }
-  }
 
 }

@@ -3,6 +3,7 @@ package org.kurento.tutorial.rtpreceiver;
 import com.google.gson.JsonObject;
 import org.kurento.client.BaseRtpEndpoint;
 import org.kurento.client.ConnectionStateChangedEvent;
+import org.kurento.client.CryptoSuite;
 import org.kurento.client.ErrorEvent;
 import org.kurento.client.EventListener;
 import org.kurento.client.IceCandidate;
@@ -11,6 +12,7 @@ import org.kurento.client.IceComponentStateChangeEvent;
 import org.kurento.client.IceGatheringDoneEvent;
 import org.kurento.client.MediaFlowInStateChangeEvent;
 import org.kurento.client.MediaFlowOutStateChangeEvent;
+import org.kurento.client.MediaPipeline;
 import org.kurento.client.MediaState;
 import org.kurento.client.MediaStateChangedEvent;
 import org.kurento.client.MediaTranscodingStateChangeEvent;
@@ -20,6 +22,7 @@ import org.kurento.client.PausedEvent;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RecordingEvent;
 import org.kurento.client.RtpEndpoint;
+import org.kurento.client.SDES;
 import org.kurento.client.StoppedEvent;
 import org.kurento.client.WebRtcEndpoint;
 import org.kurento.jsonrpc.JsonUtils;
@@ -283,5 +286,117 @@ public class EndpointUtils {
       log.error("[Handler::sendMessage] Exception: {}", ex.getMessage());
     }
   }
+
+
+  public void startWebRtcEndpoint(WebRtcEndpoint webRtcEp) {
+    // Calling gatherCandidates() is when the Endpoint actually starts working.
+    // In this tutorial, this is emphasized for demonstration purposes by
+    // leaving the ICE candidate gathering in its own method.
+    webRtcEp.gatherCandidates();
+  }
+
+  public RtpEndpoint makeRtpEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
+    if (!useSrtp) {
+      return new RtpEndpoint.Builder(pipeline).build();
+    }
+
+    // ---- SRTP configuration BEGIN ----
+    // This is used by KMS to encrypt its SRTP/SRTCP packets.
+    // Encryption key used by receiver (ASCII): "4321ZYXWVUTSRQPONMLKJIHGFEDCBA"
+    // In Base64: "NDMyMVpZWFdWVVRTUlFQT05NTEtKSUhHRkVEQ0JB"
+    CryptoSuite srtpCrypto = CryptoSuite.AES_128_CM_HMAC_SHA1_80;
+    // CryptoSuite crypto = CryptoSuite.AES_256_CM_HMAC_SHA1_80;
+
+    // You can provide the SRTP Master Key in either plain text or Base64.
+    // The second form allows providing binary, non-ASCII keys.
+    String srtpMasterKeyAscii = "4321ZYXWVUTSRQPONMLKJIHGFEDCBA";
+    // String srtpMasterKeyBase64 = "NDMyMVpZWFdWVVRTUlFQT05NTEtKSUhHRkVEQ0JB";
+    // ---- SRTP configuration END ----
+
+    SDES sdes = new SDES();
+    sdes.setCrypto(srtpCrypto);
+    sdes.setKey(srtpMasterKeyAscii);
+    // sdes.setKeyBase64(srtpMasterKeyBase64);
+
+    return new RtpEndpoint.Builder(pipeline).withCrypto(sdes).build();
+  }
+
+
+  // STOP ----------------------------------------------------------------------
+
+  public void sendPlayEnd(final WebSocketSession session, ConcurrentHashMap<String, UserSession> users) {
+    if (users.containsKey(session.getId())) {
+      JsonObject message = new JsonObject();
+      message.addProperty("id", "END_PLAYBACK");
+      sendMessage(session, message.toString());
+    }
+  }
+
+  public void stop(final WebSocketSession session, ConcurrentHashMap<String, UserSession> users) {
+    log.info("[Handler::stop]");
+
+    // Update the UI
+    sendPlayEnd(session, users);
+
+    // Remove the user session and release all resources
+    String sessionId = session.getId();
+    UserSession user = users.remove(sessionId);
+    if (user != null) {
+      MediaPipeline mediaPipeline = user.getMediaPipeline();
+      if (mediaPipeline != null) {
+        log.info("[Handler::stop] Release the Media Pipeline");
+        mediaPipeline.release();
+      }
+    }
+  }
+
+  public void handleStop(final WebSocketSession session,
+                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+    stop(session, users);
+  }
+
+  // ---------------------------------------------------------------------------
+
+  public void sendError(final WebSocketSession session, String errMsg, ConcurrentHashMap<String, UserSession> users) {
+    if (users.containsKey(session.getId())) {
+      JsonObject message = new JsonObject();
+      message.addProperty("id", "ERROR");
+      message.addProperty("message", errMsg);
+      sendMessage(session, message.toString());
+    }
+  }
+
+
+  public void initWebRtcEndpoint(final WebSocketSession session,
+                                  final WebRtcEndpoint webRtcEp, String sdpOffer) {
+    addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
+    addWebRtcEventListeners(session, webRtcEp);
+
+    /*
+    OPTIONAL: Force usage of an Application-specific STUN server.
+    Usually this is configured globally in KMS WebRTC settings file:
+    /etc/kurento/modules/kurento/WebRtcEndpoint.conf.ini
+
+    But it can also be configured per-application, as shown:
+
+    log.info("[Handler::initWebRtcEndpoint] Using STUN server: 193.147.51.12:3478");
+    webRtcEp.setStunServerAddress("193.147.51.12");
+    webRtcEp.setStunServerPort(3478);
+    */
+
+    // Process the SDP Offer to generate an SDP Answer
+    String sdpAnswer = webRtcEp.processOffer(sdpOffer);
+
+    log.info("[Handler::initWebRtcEndpoint] name: {}, SDP Offer from browser to KMS:\n{}",
+        webRtcEp.getName(), sdpOffer);
+    log.info("[Handler::initWebRtcEndpoint] name: {}, SDP Answer from KMS to browser:\n{}",
+        webRtcEp.getName(), sdpAnswer);
+
+    JsonObject message = new JsonObject();
+    message.addProperty("id", "PROCESS_SDP_ANSWER");
+    message.addProperty("sdpAnswer", sdpAnswer);
+    sendMessage(session, message.toString());
+  }
+
 
 }
