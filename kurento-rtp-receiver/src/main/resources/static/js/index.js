@@ -28,17 +28,17 @@ const UI_STARTING = 1;
 const UI_STARTED = 2;
 
 window.onload = function () {
-  console = new Console();
+  // console = new Console();
   console.log("Page loaded");
   initiateApp();
   uiSetState(UI_IDLE);
-}
+};
 
 window.onbeforeunload = function () {
   ws.forEach(client => {
     client.close();
-  })
-}
+  });
+};
 
 function explainUserMediaError(err) {
   const n = err.name;
@@ -96,7 +96,7 @@ ws.forEach((client, id) => {
         error("[onmessage] Invalid message, id: " + jsonMessage.id);
         break;
     }
-  }
+  };
 });
 
 // PROCESS_SDP_ANSWER ----------------------------------------------------------
@@ -164,6 +164,7 @@ function handleError(jsonMessage) {
 
 /* ==================== */
 /* ==== UI actions ==== */
+
 /* ==================== */
 
 function start(id) {
@@ -206,15 +207,16 @@ function stop() {
 
 function startRecording(id) {
   console.log("[startRecording triggered]", id);
-  sendMessage({
-    id: 'START_REC',
-  });
+  // sendMessage({
+  //   id: 'START_REC',
+  // }, id);
 }
+
 function stopRecording(id) {
-  console.log("[startRecording triggered]", id);
-  sendMessage({
-    id: 'STOP_REC',
-  });
+  console.log("[stopRecording triggered]", id);
+  // sendMessage({
+  //   id: 'STOP_REC',
+  // }, id);
 }
 
 /* ================== */
@@ -241,10 +243,17 @@ function addNewVideoSetup() {
   video.setAttribute('poster', '/img/webrtc.png');
 
   let videoDiv = document.getElementById('videoBig');
-  let br = document.createElement('br')
+  let br = document.createElement('br');
 
-  let startRecBtn = createButton("Start Recording");
-  let stopRecBtn = createButton("Stop Recording");
+  let startFunction = function () {
+    let local = videoCount;
+    return startRecording(local);
+  };
+  let stopFunction = function () {
+    return stopRecording(videoCount);
+  };
+  let startRecBtn = createButton("Start Recording", startFunction, videoCount);
+  let stopRecBtn = createButton("Stop Recording", stopFunction, videoCount);
 
   //push elements into arrays
   // videoRtp.push(document.getElementById('videoRtp'));
@@ -276,6 +285,18 @@ function addNewVideoSetup() {
   webRtcPeer[videoCount] = initializeWebRTCPeer(this, options);
   videoCount++;
 }
+
+
+function createButton(buttonText, onclick, id) {
+  let startRecBtn = document.createElement('input');
+  startRecBtn.type = 'button';
+  startRecBtn.id = 'button';
+  startRecBtn.value = buttonText;
+  startRecBtn.className = "btn btn-info";
+  startRecBtn.onclick = onclick;
+  return startRecBtn;
+}
+
 
 function initializeWebRTCPeer(that, options) {
   return new kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(options,
@@ -375,20 +396,6 @@ function startVideo(video) {
       console.error("[start] Error in video.play(): " + err);
     }
   });
-}
-
-
-function createButton(buttonText) {
-  let startRecBtn = document.createElement('input');
-  startRecBtn.type = 'button';
-  startRecBtn.id = 'button';
-  startRecBtn.value = buttonText;
-  startRecBtn.className = "btn btn-info"
-  startRecBtn.onclick = function () {
-    alert('start recording son');
-    return false;
-  };
-  return startRecBtn;
 }
 
 /**
