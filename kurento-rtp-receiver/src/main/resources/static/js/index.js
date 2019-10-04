@@ -18,6 +18,8 @@ let ws = [];
 
 let videoRtp = [];
 let webRtcPeer = [];
+let startRecordingBtn = [];
+let stopRecordingBtn = [];
 
 // UI
 let uiState = null;
@@ -27,9 +29,8 @@ const UI_STARTED = 2;
 
 window.onload = function () {
   console = new Console();
-  ws.push(new WebSocket('wss://' + location.host + '/rtpreceiver'));
   console.log("Page loaded");
-  videoRtp.push(document.getElementById('videoRtp'));
+  initiateApp();
   uiSetState(UI_IDLE);
 }
 
@@ -165,21 +166,106 @@ function handleError(jsonMessage) {
 /* ==== UI actions ==== */
 /* ==================== */
 
-// start -----------------------------------------------------------------------
-
-function magic(id) {
-  console.log("magic --------------------")
+function start(id) {
+  // id = 0;
+  // console.log("[start] Create WebRtcPeerRecvonly");
+  // uiSetState(UI_STARTING);
+  // showSpinner(videoRtp[id]);
+  //
+  // const options = {
+  //   localVideo: null,
+  //   remoteVideo: videoRtp[id],
+  //   mediaConstraints: {audio: true, video: true},
+  //   onicecandidate: (candidate) => sendMessage({
+  //     id: 'ADD_ICE_CANDIDATE',
+  //     candidate: candidate,
+  //   }),
+  // };
+  //
+  // webRtcPeer[id] = initializeWebRTCPeer(this, options);
 }
 
-function start(id) {
-  id = 0;
+
+// stop ------------------------------------------------------------------------
+
+function stop() {
+  console.log("[stop]");
+
+  sendMessage({
+    id: 'STOP',
+  });
+
+  if (webRtcPeer) {
+    webRtcPeer.dispose();
+    webRtcPeer = null;
+  }
+
+  uiSetState(UI_IDLE);
+  hideSpinner(videoRtp);
+}
+
+function startRecording(id) {
+  console.log("[startRecording triggered]", id);
+  sendMessage({
+    id: 'START_REC',
+  });
+}
+function stopRecording(id) {
+  console.log("[startRecording triggered]", id);
+  sendMessage({
+    id: 'STOP_REC',
+  });
+}
+
+/* ================== */
+/* ==== UI state ==== */
+
+/* ================== */
+
+function initiateApp() {
+  uiEnableElement('#add', 'addNewVideoSetup()');
+  // uiEnableElement('#magic', 'magic(' + 0 + ')');
+}
+
+let videoCount = 0;
+
+function addNewVideoSetup() {
+
+  //create HTML elements
+  let video = document.createElement('video');
+  video.autoplay = true;
+  video.setAttribute('autoplay', '');
+  video.setAttribute('playsinline', '');
+  video.setAttribute('width', '480');
+  video.setAttribute('height', '360');
+  video.setAttribute('poster', '/img/webrtc.png');
+
+  let videoDiv = document.getElementById('videoBig');
+  let br = document.createElement('br')
+
+  let startRecBtn = createButton("Start Recording");
+  let stopRecBtn = createButton("Stop Recording");
+
+  //push elements into arrays
+  // videoRtp.push(document.getElementById('videoRtp'));
+  ws.push(new WebSocket('wss://' + location.host + '/rtpreceiver'));
+  videoRtp.push(video);
+  startRecordingBtn.push(startRecBtn);
+  stopRecordingBtn.push(stopRecBtn);
+
+  //append to DOM
+  videoDiv.appendChild(video);
+  videoDiv.appendChild(startRecBtn);
+  videoDiv.appendChild(stopRecBtn);
+
+  // ---------------------- START LOGIC ---------------------------
   console.log("[start] Create WebRtcPeerRecvonly");
-  uiSetState(UI_STARTING);
-  showSpinner(videoRtp[id]);
+  uiSetState(UI_STARTING, videoCount);
+  showSpinner(videoRtp[videoCount]);
 
   const options = {
     localVideo: null,
-    remoteVideo: videoRtp[id],
+    remoteVideo: videoRtp[videoCount],
     mediaConstraints: {audio: true, video: true},
     onicecandidate: (candidate) => sendMessage({
       id: 'ADD_ICE_CANDIDATE',
@@ -187,7 +273,8 @@ function start(id) {
     }),
   };
 
-  webRtcPeer[id] = initializeWebRTCPeer(this, options);
+  webRtcPeer[videoCount] = initializeWebRTCPeer(this, options);
+  videoCount++;
 }
 
 function initializeWebRTCPeer(that, options) {
@@ -227,61 +314,24 @@ function initializeWebRTCPeer(that, options) {
     });
 }
 
-// stop ------------------------------------------------------------------------
-
-function stop() {
-  console.log("[stop]");
-
-  sendMessage({
-    id: 'STOP',
-  });
-
-  if (webRtcPeer) {
-    webRtcPeer.dispose();
-    webRtcPeer = null;
-  }
-
-  uiSetState(UI_IDLE);
-  hideSpinner(videoRtp);
-}
-
-function startRecording(id) {
-  console.log("[startRecording triggered]", id);
-  sendMessage({
-    id: 'START_REC',
-  });
-}
-function stopRecording(id) {
-  console.log("[startRecording triggered]", id);
-  sendMessage({
-    id: 'STOP_REC',
-  });
-}
-
-/* ================== */
-/* ==== UI state ==== */
-
-/* ================== */
-
 function uiSetState(nextState, id) {
-  uiEnableElement('#magic', 'magic(id)');
-  switch (nextState) {
-    case UI_IDLE:
-      uiEnableElement('#start', 'start(id)');
-      uiDisableElement('#stop');
-      break;
-    case UI_STARTING:
-      uiDisableElement('#start');
-      uiDisableElement('#stop');
-      break;
-    case UI_STARTED:
-      uiDisableElement('#start');
-      uiEnableElement('#stop', 'stop()');
-      break;
-    default:
-      console.error("[setState] Unknown state: " + nextState);
-      return;
-  }
+  // switch (nextState) {
+  //   case UI_IDLE:
+  //     uiEnableElement('#start', 'start(id)');
+  //     uiDisableElement('#stop');
+  //     break;
+  //   case UI_STARTING:
+  //     uiDisableElement('#start');
+  //     uiDisableElement('#stop');
+  //     break;
+  //   case UI_STARTED:
+  //     uiDisableElement('#start');
+  //     uiEnableElement('#stop', 'stop()');
+  //     break;
+  //   default:
+  //     console.error("[setState] Unknown state: " + nextState);
+  //     return;
+  // }
   uiState = nextState;
 }
 
@@ -325,6 +375,20 @@ function startVideo(video) {
       console.error("[start] Error in video.play(): " + err);
     }
   });
+}
+
+
+function createButton(buttonText) {
+  let startRecBtn = document.createElement('input');
+  startRecBtn.type = 'button';
+  startRecBtn.id = 'button';
+  startRecBtn.value = buttonText;
+  startRecBtn.className = "btn btn-info"
+  startRecBtn.onclick = function () {
+    alert('start recording son');
+    return false;
+  };
+  return startRecBtn;
 }
 
 /**
