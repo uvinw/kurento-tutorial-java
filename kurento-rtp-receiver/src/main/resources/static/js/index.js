@@ -68,29 +68,31 @@ function sendMessage(message, id) {
 /* ==== WebSocket signaling ==== */
 /* ============================= */
 
-ws.forEach((client, id) => {
+ws.forEach((client, videoId) => {
+  debugger;
   client.onmessage = function (message) {
+    debugger;
     const jsonMessage = JSON.parse(message.data);
     console.log("[onmessage] Received message: " + message.data);
 
     switch (jsonMessage.id) {
       case 'PROCESS_SDP_ANSWER':
-        handleProcessSdpAnswer(jsonMessage, id);
+        handleProcessSdpAnswer(jsonMessage, videoId);
         break;
       case 'ADD_ICE_CANDIDATE':
-        handleAddIceCandidate(jsonMessage, id);
+        handleAddIceCandidate(jsonMessage, videoId);
         break;
       // case 'SHOW_CONN_INFO':
-      //   handleShowConnInfo(jsonMessage, id);
+      //   handleShowConnInfo(jsonMessage, videoId);
       //   break;
       // case 'SHOW_SDP_ANSWER':
-      //   handleShowSdpAnswer(jsonMessage, id);
+      //   handleShowSdpAnswer(jsonMessage, videoId);
       //   break;
       case 'END_PLAYBACK':
-        handleEndPlayback(jsonMessage, id);
+        handleEndPlayback(jsonMessage, videoId);
         break;
       case 'ERROR':
-        handleError(jsonMessage, id);
+        handleError(jsonMessage, videoId);
         break;
       default:
         error("[onmessage] Invalid message, id: " + jsonMessage.id);
@@ -102,6 +104,7 @@ ws.forEach((client, id) => {
 // PROCESS_SDP_ANSWER ----------------------------------------------------------
 
 function handleProcessSdpAnswer(jsonMessage, id) {
+  debugger;
   console.log("[handleProcessSdpAnswer] SDP Answer received from Kurento Client; process in Kurento Peer");
 
   webRtcPeer[id].processAnswer(jsonMessage.sdpAnswer, (err) => {
@@ -120,7 +123,9 @@ function handleProcessSdpAnswer(jsonMessage, id) {
 // ADD_ICE_CANDIDATE -----------------------------------------------------------
 
 function handleAddIceCandidate(jsonMessage, id) {
-  webRtcPeer[i].addIceCandidate(jsonMessage.candidate, (err) => {
+  debugger;
+
+  webRtcPeer[id].addIceCandidate(jsonMessage.candidate, (err) => {
     if (err) {
       console.error("[handleAddIceCandidate] " + err);
       return;
@@ -229,9 +234,11 @@ function initiateApp() {
   // uiEnableElement('#magic', 'magic(' + 0 + ')');
 }
 
-let videoCount = 0;
+let videoCount = -1;
+
 
 function addNewVideoSetup() {
+  videoCount++;
 
   //create HTML elements
   let video = document.createElement('video');
@@ -240,19 +247,18 @@ function addNewVideoSetup() {
   video.setAttribute('playsinline', '');
   video.setAttribute('width', '480');
   video.setAttribute('height', '360');
-  video.setAttribute('poster', '/img/webrtc.png');
+  // video.setAttribute('poster', '/img/webrtc.png');
 
   let videoDiv = document.getElementById('videoBig');
   let br = document.createElement('br');
 
-  let startFunction = function () {
-    let local = videoCount;
-    return startRecording(local);
-  };
+  // let startFunction =
+
   let stopFunction = function () {
     return stopRecording(videoCount);
   };
-  let startRecBtn = createButton("Start Recording", startFunction, videoCount);
+
+  let startRecBtn = createButton("Start Recording", videoCount);
   let stopRecBtn = createButton("Stop Recording", stopFunction, videoCount);
 
   //push elements into arrays
@@ -279,27 +285,10 @@ function addNewVideoSetup() {
     onicecandidate: (candidate) => sendMessage({
       id: 'ADD_ICE_CANDIDATE',
       candidate: candidate,
-    }),
+    }, videoCount),
   };
 
-  webRtcPeer[videoCount] = initializeWebRTCPeer(this, options);
-  videoCount++;
-}
-
-
-function createButton(buttonText, onclick, id) {
-  let startRecBtn = document.createElement('input');
-  startRecBtn.type = 'button';
-  startRecBtn.id = 'button';
-  startRecBtn.value = buttonText;
-  startRecBtn.className = "btn btn-info";
-  startRecBtn.onclick = onclick;
-  return startRecBtn;
-}
-
-
-function initializeWebRTCPeer(that, options) {
-  return new kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(options,
+  webRtcPeer[videoCount] = new kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(options,
     function (err) {
       if (err) {
         console.error("[start/WebRtcPeerRecvonly] Error in constructor: "
@@ -308,7 +297,7 @@ function initializeWebRTCPeer(that, options) {
       }
 
       console.log("[start/WebRtcPeerRecvonly] Created; generate SDP Offer");
-      that.webRtcPeer[id].generateOffer((err, sdpOffer) => {
+      webRtcPeer[videoCount].generateOffer((err, sdpOffer) => {
         if (err) {
           console.error("[start/WebRtcPeerRecvonly/generateOffer] " + err);
           return;
@@ -327,12 +316,44 @@ function initializeWebRTCPeer(that, options) {
           sdpOffer: sdpOffer,
           useComedia: useComedia,
           useSrtp: useSrtp,
-        });
+        }, videoCount);
 
         console.log("[start/WebRtcPeerRecvonly/generateOffer] Done!");
         uiSetState(UI_STARTED);
+
+
       });
     });
+
+
+
+
+
+
+
+
+}
+
+
+function createButton(buttonText, id) {
+  let startRecBtn = document.createElement('input');
+  startRecBtn.type = 'button';
+  startRecBtn.id = 'button';
+  startRecBtn.value = buttonText;
+  startRecBtn.className = "btn btn-info";
+  startRecBtn.onclick = higherStartFunction(id);
+  return startRecBtn;
+}
+
+function higherStartFunction(test) {
+  return function () {
+    startRecording(test);
+  }
+};
+
+
+function initializeWebRTCPeer(that, options) {
+
 }
 
 function uiSetState(nextState, id) {
