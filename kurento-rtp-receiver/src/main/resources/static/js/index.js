@@ -68,38 +68,39 @@ function sendMessage(message, id) {
 /* ==== WebSocket signaling ==== */
 /* ============================= */
 
-ws.forEach((client, videoId) => {
-  debugger;
-  client.onmessage = function (message) {
-    debugger;
-    const jsonMessage = JSON.parse(message.data);
-    console.log("[onmessage] Received message: " + message.data);
+// ws.forEach((client, videoId) => {
+//   debugger;
+//   client.onmessage = function (message) {
+//     debugger;
+//     const jsonMessage = JSON.parse(message.data);
+//     console.log("[onmessage] Received message: " + message.data);
+//
+//     switch (jsonMessage.id) {
+//       case 'PROCESS_SDP_ANSWER':
+//         handleProcessSdpAnswer(jsonMessage, videoId);
+//         break;
+//       case 'ADD_ICE_CANDIDATE':
+//         handleAddIceCandidate(jsonMessage, videoId);
+//         break;
+//       // case 'SHOW_CONN_INFO':
+//       //   handleShowConnInfo(jsonMessage, videoId);
+//       //   break;
+//       // case 'SHOW_SDP_ANSWER':
+//       //   handleShowSdpAnswer(jsonMessage, videoId);
+//       //   break;
+//       case 'END_PLAYBACK':
+//         handleEndPlayback(jsonMessage, videoId);
+//         break;
+//       case 'ERROR':
+//         handleError(jsonMessage, videoId);
+//         break;
+//       default:
+//         error("[onmessage] Invalid message, id: " + jsonMessage.id);
+//         break;
+//     }
+//   };
+// });
 
-    switch (jsonMessage.id) {
-      case 'PROCESS_SDP_ANSWER':
-        handleProcessSdpAnswer(jsonMessage, videoId);
-        break;
-      case 'ADD_ICE_CANDIDATE':
-        handleAddIceCandidate(jsonMessage, videoId);
-        break;
-      // case 'SHOW_CONN_INFO':
-      //   handleShowConnInfo(jsonMessage, videoId);
-      //   break;
-      // case 'SHOW_SDP_ANSWER':
-      //   handleShowSdpAnswer(jsonMessage, videoId);
-      //   break;
-      case 'END_PLAYBACK':
-        handleEndPlayback(jsonMessage, videoId);
-        break;
-      case 'ERROR':
-        handleError(jsonMessage, videoId);
-        break;
-      default:
-        error("[onmessage] Invalid message, id: " + jsonMessage.id);
-        break;
-    }
-  };
-});
 
 // PROCESS_SDP_ANSWER ----------------------------------------------------------
 
@@ -123,8 +124,6 @@ function handleProcessSdpAnswer(jsonMessage, id) {
 // ADD_ICE_CANDIDATE -----------------------------------------------------------
 
 function handleAddIceCandidate(jsonMessage, id) {
-  debugger;
-
   webRtcPeer[id].addIceCandidate(jsonMessage.candidate, (err) => {
     if (err) {
       console.error("[handleAddIceCandidate] " + err);
@@ -263,7 +262,38 @@ function addNewVideoSetup() {
 
   //push elements into arrays
   // videoRtp.push(document.getElementById('videoRtp'));
-  ws.push(new WebSocket('wss://' + location.host + '/rtpreceiver'));
+  let newWs = new WebSocket('wss://' + location.host + '/rtpreceiver');
+  newWs.onmessage = function (message) {
+    debugger;
+    const jsonMessage = JSON.parse(message.data);
+    console.log("[onmessage] Received message: " + message.data);
+    //todo: this video count has to be passed separately - to avoid live updating
+    switch (jsonMessage.id) {
+      case 'PROCESS_SDP_ANSWER':
+        handleProcessSdpAnswer(jsonMessage, videoCount);
+        break;
+      case 'ADD_ICE_CANDIDATE':
+        handleAddIceCandidate(jsonMessage, videoCount);
+        break;
+      // case 'SHOW_CONN_INFO':
+      //   handleShowConnInfo(jsonMessage, videoCount);
+      //   break;
+      // case 'SHOW_SDP_ANSWER':
+      //   handleShowSdpAnswer(jsonMessage, videoCount);
+      //   break;
+      case 'END_PLAYBACK':
+        handleEndPlayback(jsonMessage, videoCount);
+        break;
+      case 'ERROR':
+        handleError(jsonMessage, videoCount);
+        break;
+      default:
+        error("[onmessage] Invalid message, id: " + jsonMessage.id);
+        break;
+    }
+  };
+
+  ws.push(newWs);
   videoRtp.push(video);
   startRecordingBtn.push(startRecBtn);
   stopRecordingBtn.push(stopRecBtn);
@@ -311,15 +341,27 @@ function addNewVideoSetup() {
         console.log("[start/WebRtcPeerRecvonly/generateOffer] Use SRTP: "
           + useSrtp);
 
-        sendMessage({
-          id: 'PROCESS_SDP_OFFER',
-          sdpOffer: sdpOffer,
-          useComedia: useComedia,
-          useSrtp: useSrtp,
-        }, videoCount);
+        let millisecondsToWait = 2000;
+        setTimeout(function () {
 
-        console.log("[start/WebRtcPeerRecvonly/generateOffer] Done!");
-        uiSetState(UI_STARTED);
+
+
+          sendMessage({
+            id: 'PROCESS_SDP_OFFER',
+            sdpOffer: sdpOffer,
+            useComedia: useComedia,
+            useSrtp: useSrtp,
+          }, videoCount);
+
+          console.log("[start/WebRtcPeerRecvonly/generateOffer] Done!");
+          uiSetState(UI_STARTED);
+
+
+          }, millisecondsToWait);
+
+
+
+
 
 
       });
@@ -350,6 +392,12 @@ function higherStartFunction(test) {
     startRecording(test);
   }
 };
+
+// function higherOnMessageFunction(id) {
+//   return function () {
+//     newOnMessage(id);
+//   }
+// };
 
 
 function initializeWebRTCPeer(that, options) {
