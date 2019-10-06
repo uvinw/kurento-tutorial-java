@@ -394,6 +394,7 @@ Some default values are defined by different RFCs:
     Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
     final RtpEndpoint rtpEp = endpointUtils.makeRtpEndpoint(pipeline, useSrtp);
     user.setRtpEp(rtpEp);
+    user.setRecorder(recorder);
 
     endpointUtils.addRtpListeners(rtpEp);
     endpointUtils.addWebRtpListeners(webRtcEp);

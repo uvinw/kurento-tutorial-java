@@ -105,7 +105,6 @@ function sendMessage(message, id) {
 // PROCESS_SDP_ANSWER ----------------------------------------------------------
 
 function handleProcessSdpAnswer(jsonMessage, id) {
-  debugger;
   console.log("[handleProcessSdpAnswer] SDP Answer received from Kurento Client; process in Kurento Peer");
 
   webRtcPeer[id].processAnswer(jsonMessage.sdpAnswer, (err) => {
@@ -162,7 +161,7 @@ function error(errMessage) {
 
 function handleError(jsonMessage) {
   const errMessage = jsonMessage.message;
-  error(errMessage);
+  // error(errMessage);
 }
 
 
@@ -211,16 +210,16 @@ function stop() {
 
 function startRecording(id) {
   console.log("[startRecording triggered]", id);
-  // sendMessage({
-  //   id: 'START_REC',
-  // }, id);
+  sendMessage({
+    id: 'START_REC',
+  }, id);
 }
 
 function stopRecording(id) {
   console.log("[stopRecording triggered]", id);
-  // sendMessage({
-  //   id: 'STOP_REC',
-  // }, id);
+  sendMessage({
+    id: 'STOP_REC',
+  }, id);
 }
 
 /* ================== */
@@ -249,24 +248,15 @@ function addNewVideoSetup() {
   // video.setAttribute('poster', '/img/webrtc.png');
 
   let videoDiv = document.getElementById('videoBig');
-  let br = document.createElement('br');
-
-  // let startFunction =
-
-  let stopFunction = function () {
-    return stopRecording(videoCount);
-  };
-
-  let startRecBtn = createButton("Start Recording", videoCount);
-  let stopRecBtn = createButton("Stop Recording", stopFunction, videoCount);
+  let startRecBtn = createStartButton("Start Recording", videoCount);
+  let stopRecBtn = createStopButton("Stop Recording", videoCount);
 
   //push elements into arrays
   // videoRtp.push(document.getElementById('videoRtp'));
   let newWs = new WebSocket('wss://' + location.host + '/rtpreceiver');
   newWs.onmessage = function (message) {
-    debugger;
     const jsonMessage = JSON.parse(message.data);
-    console.log("[onmessage] Received message: " + message.data);
+    console.log("[onmessage] Received message: " + message.data + " for WS ID: " + videoCount);
     //todo: this video count has to be passed separately - to avoid live updating
     switch (jsonMessage.id) {
       case 'PROCESS_SDP_ANSWER':
@@ -285,10 +275,13 @@ function addNewVideoSetup() {
         handleEndPlayback(jsonMessage, videoCount);
         break;
       case 'ERROR':
+        console.log('ERROR rec from websocket:');
+        console.log(jsonMessage);
         handleError(jsonMessage, videoCount);
         break;
       default:
         error("[onmessage] Invalid message, id: " + jsonMessage.id);
+        console.log(jsonMessage);
         break;
     }
   };
@@ -308,43 +301,42 @@ function addNewVideoSetup() {
   uiSetState(UI_STARTING, videoCount);
   showSpinner(videoRtp[videoCount]);
 
-  const options = {
-    localVideo: null,
-    remoteVideo: videoRtp[videoCount],
-    mediaConstraints: {audio: true, video: true},
-    onicecandidate: (candidate) => sendMessage({
-      id: 'ADD_ICE_CANDIDATE',
-      candidate: candidate,
-    }, videoCount),
-  };
 
-  webRtcPeer[videoCount] = new kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(options,
-    function (err) {
-      if (err) {
-        console.error("[start/WebRtcPeerRecvonly] Error in constructor: "
-          + explainUserMediaError(err));
-        return;
-      }
+  let millisecondsToWait = 3000;
+  setTimeout(function () {
 
-      console.log("[start/WebRtcPeerRecvonly] Created; generate SDP Offer");
-      webRtcPeer[videoCount].generateOffer((err, sdpOffer) => {
+    const options = {
+      localVideo: null,
+      remoteVideo: videoRtp[videoCount],
+      mediaConstraints: {audio: true, video: true},
+      onicecandidate: (candidate) => sendMessage({
+        id: 'ADD_ICE_CANDIDATE',
+        candidate: candidate,
+      }, videoCount),
+    };
+
+    webRtcPeer[videoCount] = new kurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(options,
+      function (err) {
         if (err) {
-          console.error("[start/WebRtcPeerRecvonly/generateOffer] " + err);
+          console.error("[start/WebRtcPeerRecvonly] Error in constructor: "
+            + explainUserMediaError(err));
           return;
         }
 
-        const useComedia = document.getElementById('useComedia').checked;
-        const useSrtp = document.getElementById('useSrtp').checked;
+        console.log("[start/WebRtcPeerRecvonly] Created; generate SDP Offer");
+        webRtcPeer[videoCount].generateOffer((err, sdpOffer) => {
+          if (err) {
+            console.error("[start/WebRtcPeerRecvonly/generateOffer] " + err);
+            return;
+          }
 
-        console.log("[start/WebRtcPeerRecvonly/generateOffer] Use COMEDIA: "
-          + useComedia);
-        console.log("[start/WebRtcPeerRecvonly/generateOffer] Use SRTP: "
-          + useSrtp);
+          const useComedia = document.getElementById('useComedia').checked;
+          const useSrtp = document.getElementById('useSrtp').checked;
 
-        let millisecondsToWait = 2000;
-        setTimeout(function () {
-
-
+          console.log("[start/WebRtcPeerRecvonly/generateOffer] Use COMEDIA: "
+            + useComedia);
+          console.log("[start/WebRtcPeerRecvonly/generateOffer] Use SRTP: "
+            + useSrtp);
 
           sendMessage({
             id: 'PROCESS_SDP_OFFER',
@@ -355,29 +347,16 @@ function addNewVideoSetup() {
 
           console.log("[start/WebRtcPeerRecvonly/generateOffer] Done!");
           uiSetState(UI_STARTED);
-
-
-          }, millisecondsToWait);
-
-
-
-
-
-
+        });
       });
-    });
 
-
-
-
-
-
+  }, millisecondsToWait);
 
 
 }
 
 
-function createButton(buttonText, id) {
+function createStartButton(buttonText, id) {
   let startRecBtn = document.createElement('input');
   startRecBtn.type = 'button';
   startRecBtn.id = 'button';
@@ -386,10 +365,24 @@ function createButton(buttonText, id) {
   startRecBtn.onclick = higherStartFunction(id);
   return startRecBtn;
 }
+function createStopButton(buttonText, id) {
+  let stopRecBtn = document.createElement('input');
+  stopRecBtn.type = 'button';
+  stopRecBtn.id = 'button';
+  stopRecBtn.value = buttonText;
+  stopRecBtn.className = "btn btn-info";
+  stopRecBtn.onclick = higherStopFunction(id);
+  return stopRecBtn;
+}
 
 function higherStartFunction(test) {
   return function () {
     startRecording(test);
+  }
+};
+function higherStopFunction(test) {
+  return function () {
+    stopRecording(test);
   }
 };
 
