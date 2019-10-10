@@ -57,7 +57,7 @@ public class Handler extends TextWebSocketHandler {
 
   private final ConcurrentHashMap<String, UserSession> users = new ConcurrentHashMap<>();
 
-  private static final String RECORDER_BASE_FILE_PATH = "file:///tmp/";
+  private static final String RECORDER_BASE_FILE_PATH = "file:///mnt/c/Users/uvin.withana/Videos/";
   private static final String RECORDER_FILE_EXT = "-video.mp4";
 
   private EndpointUtils endpointUtils = new EndpointUtils();
@@ -172,7 +172,7 @@ public class Handler extends TextWebSocketHandler {
     that the receiver is able to process.
     */
     // log.info("[Handler::startRtpEndpoint] Limit output bandwidth: 1024 kbps");
-    // rtpEp.setMaxVideoRecvBandwidth(1024); // In kbps (1000 bps)
+//     rtpEp.setMaxVideoRecvBandwidth(6000); // In kbps (1000 bps)
 
     String sdpComediaAttr = "";
     if (useComedia) {
@@ -237,6 +237,7 @@ Some default values are defined by different RFCs:
               + "a=ssrc:" + senderSsrcA + " cname:" + senderCname + "\r\n";
     }
 
+    //todo: uncomment this
     rtpSdpOffer +=
         "m=video " + senderRtpPortV + " " + senderProtocol + " 103\r\n"
             + sdpCryptoAttr
@@ -392,6 +393,8 @@ Some default values are defined by different RFCs:
 
 
     Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
+
+//    final PlayerEndpoint playerEp = endpointUtils.makePlayerEndpoint(pipeline, useSrtp);
     final RtpEndpoint rtpEp = endpointUtils.makeRtpEndpoint(pipeline, useSrtp);
     user.setRtpEp(rtpEp);
     user.setRecorder(recorder);
@@ -399,10 +402,36 @@ Some default values are defined by different RFCs:
     endpointUtils.addRtpListeners(rtpEp);
     endpointUtils.addWebRtpListeners(webRtcEp);
 
+    webRtcEp.setMaxOutputBitrate(0);
+    webRtcEp.setMaxAudioRecvBandwidth(0);
+    recorder.setMaxOutputBitrate(0);
+    rtpEp.setMaxVideoSendBandwidth(0);
+    rtpEp.setMaxOutputBitrate(0);
+
+    rtpEp.setMinOutputBitrate(0);
+    rtpEp.setMaxAudioRecvBandwidth(0);
+
+    rtpEp.setMaxAudioRecvBandwidth(0);
+    rtpEp.setMaxVideoSendBandwidth(0);
+    rtpEp.setMaxVideoRecvBandwidth(0);
+    rtpEp.setMinVideoRecvBandwidth(0);
+    rtpEp.setMinVideoSendBandwidth(0);
+
+    recorder.setMaxOutputBitrate(0);
+    recorder.setMinOutputBitrate(0);
     // ---- Endpoint configuration
     rtpEp.connect(recorder, MediaType.VIDEO);
     rtpEp.connect(recorder, MediaType.AUDIO);
+    //todo: uncomment this
     rtpEp.connect(webRtcEp);
+
+    //todo: temp code for connecting all webrtc endpoints to the same RTP sink
+//    if (users.keySet().size() == 4) {
+//      log.error("xxxxxx--------------------------------" + users.keySet().size());
+//      for (String key : users.keySet()) {
+//        rtpEp.connect(users.get(key).getWebRtcEp());
+//      }
+//    }
 
     String sdpOffer = jsonMessage.get("sdpOffer").getAsString();
     endpointUtils.initWebRtcEndpoint(session, webRtcEp, sdpOffer);

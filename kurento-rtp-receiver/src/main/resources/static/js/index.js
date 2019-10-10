@@ -131,17 +131,23 @@ function handleAddIceCandidate(jsonMessage, id) {
   });
 }
 
-// // SHOW_CONN_INFO --------------------------------------------------------------
-//
-// function handleShowConnInfo(jsonMessage, id) {
-//   document.getElementById("msgConnInfo").value = jsonMessage.text;
-// }
-//
-// // SHOW_SDP_ANSWER -------------------------------------------------------------
-//
-// function handleShowSdpAnswer(jsonMessage, id) {
-//   document.getElementById("msgSdpText").value = jsonMessage.text;
-// }
+// SHOW_CONN_INFO --------------------------------------------------------------
+
+function handleShowConnInfo(jsonMessage, id) {
+  console.log('------------------CONN INFO-----------------------')
+  // document.getElementById("msgConnInfo").value = jsonMessage.text;
+  console.log(jsonMessage.text);
+  console.log('-----------------------------------------------\n\n\n')
+}
+
+// SHOW_SDP_ANSWER -------------------------------------------------------------
+
+function handleShowSdpAnswer(jsonMessage, id) {
+  console.log('------------------SDP answer----------------------')
+  // document.getElementById("msgSdpText").value = jsonMessage.text;
+  console.log(jsonMessage.text);
+  console.log('-----------------------------------------------\n\n\n')
+}
 
 // END_PLAYBACK ----------------------------------------------------------------
 
@@ -265,12 +271,12 @@ function addNewVideoSetup() {
       case 'ADD_ICE_CANDIDATE':
         handleAddIceCandidate(jsonMessage, videoCount);
         break;
-      // case 'SHOW_CONN_INFO':
-      //   handleShowConnInfo(jsonMessage, videoCount);
-      //   break;
-      // case 'SHOW_SDP_ANSWER':
-      //   handleShowSdpAnswer(jsonMessage, videoCount);
-      //   break;
+      case 'SHOW_CONN_INFO':
+        handleShowConnInfo(jsonMessage, videoCount);
+        break;
+      case 'SHOW_SDP_ANSWER':
+        handleShowSdpAnswer(jsonMessage, videoCount);
+        break;
       case 'END_PLAYBACK':
         handleEndPlayback(jsonMessage, videoCount);
         break;

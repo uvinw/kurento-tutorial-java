@@ -19,6 +19,7 @@ import org.kurento.client.MediaTranscodingStateChangeEvent;
 import org.kurento.client.MediaType;
 import org.kurento.client.NewCandidatePairSelectedEvent;
 import org.kurento.client.PausedEvent;
+import org.kurento.client.PlayerEndpoint;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RecordingEvent;
 import org.kurento.client.RtpEndpoint;
@@ -65,15 +66,17 @@ public class EndpointUtils {
       @Override
       public void onEvent(MediaStateChangedEvent event) {
         log.info("RECORD:  RTP sink media state change - new:" + event.getNewState() + "- old:" + event.getOldState());
+
+
+        log.info("RECORD: max output bit rate: " + rtpEp.getMaxOutputBitrate());
+        log.info("RECORD: min output bit rate: " + rtpEp.getMinOutputBitrate());
+        log.info("RECORD: max video recv bw: " + rtpEp.getMaxVideoRecvBandwidth());
+        log.info("RECORD: min video recv bw: " + rtpEp.getMinVideoRecvBandwidth());
+        log.info("RECORD: max video send bw: " + rtpEp.getMaxVideoSendBandwidth());
+        log.info("RECORD: min video send bw: " + rtpEp.getMinVideoSendBandwidth());
         if (MediaState.CONNECTED == event.getNewState()) {
-          log.info("RECORD:  RTP sink media state changed to CONNECTED");
-//          recorder.record();
-          //todo: move these to frontend
         }
         if (MediaState.DISCONNECTED == event.getNewState()) {
-          log.info("RECORD:  RTP sink media state changed to DISCONNECTED");
-//          recorder.stopAndWait();
-          //todo: move these to frontend
         }
       }
     });
@@ -86,6 +89,7 @@ public class EndpointUtils {
       log.info("RECORD: rtp connection state change" + event.getNewState() + event.getOldState());
     });
   }
+
   public void addRecorderListeners(RecorderEndpoint recorder) {
 
     recorder.addRecordingListener(new EventListener<RecordingEvent>() {
@@ -93,7 +97,8 @@ public class EndpointUtils {
       public void onEvent(RecordingEvent event) {
         log.info("RECORD: on event: " + event.getType());
         if (recorder.isMediaFlowingIn(MediaType.VIDEO)) {
-          log.info("RECORD: recorder video flowing in ");
+          log.info("RECORD: recorder video flowing in: max output bitrate" + recorder.getMaxOutputBitrate());
+          log.info("RECORD: recorder video flowing in: min output bitrate" + recorder.getMinOutputBitrate());
         }
       }
     });
@@ -123,7 +128,7 @@ public class EndpointUtils {
   // ADD_ICE_CANDIDATE ---------------------------------------------------------
 
   public void handleAddIceCandidate(final WebSocketSession session,
-                                     JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+                                    JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
     String sessionId = session.getId();
     UserSession user = users.get(sessionId);
 
@@ -141,7 +146,7 @@ public class EndpointUtils {
 
 
   public void addWebRtcEventListeners(final WebSocketSession session,
-                                       final WebRtcEndpoint webRtcEp) {
+                                      final WebRtcEndpoint webRtcEp) {
     log.info("[Handler::addWebRtcEventListeners] name: {}, sessionId: {}",
         webRtcEp.getName(), session.getId());
 
@@ -274,7 +279,7 @@ public class EndpointUtils {
 
 
   public synchronized void sendMessage(final WebSocketSession session,
-                                        String message) {
+                                       String message) {
     if (!session.isOpen()) {
       log.error("[Handler::sendMessage] WebSocket session is closed");
       return;
@@ -321,6 +326,11 @@ public class EndpointUtils {
     return new RtpEndpoint.Builder(pipeline).withCrypto(sdes).build();
   }
 
+  public PlayerEndpoint makePlayerEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
+    return null;
+//      return new RtpEndpoint.Builder(pipeline).build();
+  }
+
 
   // STOP ----------------------------------------------------------------------
 
@@ -351,23 +361,23 @@ public class EndpointUtils {
   }
 
   public void handleStop(final WebSocketSession session,
-                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+                         JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
     stop(session, users);
   }
 
   //todo: connect with frontend
   public void handleStartRec(final WebSocketSession session,
-                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+                             JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
     String sessionId = session.getId();
     UserSession user = users.get(sessionId);
     user.getRecorder().record();
   }
 
   public void handleStopRec(final WebSocketSession session,
-                          JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
+                            JsonObject jsonMessage, ConcurrentHashMap<String, UserSession> users) {
     String sessionId = session.getId();
     UserSession user = users.get(sessionId);
-    user.getRecorder().stopAndWait();
+    user.getRecorder().stop();
   }
 
   // ---------------------------------------------------------------------------
@@ -383,7 +393,7 @@ public class EndpointUtils {
 
 
   public void initWebRtcEndpoint(final WebSocketSession session,
-                                  final WebRtcEndpoint webRtcEp, String sdpOffer) {
+                                 final WebRtcEndpoint webRtcEp, String sdpOffer) {
     addBaseEventListeners(session, webRtcEp, "WebRtcEndpoint");
     addWebRtcEventListeners(session, webRtcEp);
 
