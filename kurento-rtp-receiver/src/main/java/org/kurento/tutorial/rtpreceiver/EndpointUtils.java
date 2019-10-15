@@ -80,13 +80,31 @@ public class EndpointUtils {
         }
       }
     });
+  }
 
-    rtpEp.addErrorListener(event -> {
-      log.info("RECORD: rtp error" + event.getErrorCode() + event.getDescription() + event.getType());
+  public void addPlayerListeners(PlayerEndpoint playerEp) {
+    playerEp.addMediaFlowInStateChangeListener(new EventListener<MediaFlowInStateChangeEvent>() {
+      @Override
+      public void onEvent(MediaFlowInStateChangeEvent event) {
+        log.error("RECORD: Player sink flow in state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
+        log.info("RECORD: Player max output bit rate: " + playerEp.getMaxOutputBitrate());
+        log.info("RECORD: Player min output bit rate: " + playerEp.getMinOutputBitrate());
+      }
     });
 
-    rtpEp.addConnectionStateChangedListener(event -> {
-      log.info("RECORD: rtp connection state change" + event.getNewState() + event.getOldState());
+    playerEp.addErrorListener(event -> {
+      log.info("RECORD: player error" + event.getErrorCode() + event.getDescription() + event.getType());
+    });
+
+    playerEp.addMediaFlowOutStateChangeListener(event -> {
+      log.error("RECORD: Player sink flow out state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
+    });
+    playerEp.addElementConnectedListener(event -> {
+      log.error("RECORD: Player sink element connected: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getSinkMediaDescription());
+    });
+
+    playerEp.addMediaTranscodingStateChangeListener(event -> {
+      log.error("RECORD: Player TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState() + "::" + event.getBinName());
     });
   }
 
@@ -122,6 +140,10 @@ public class EndpointUtils {
       public void onEvent(ErrorEvent event) {
         log.error("error in recorder: " + event.getType() + "::" + event.getDescription() + ":: " + event.getErrorCode());
       }
+    });
+
+    recorder.addMediaTranscodingStateChangeListener(event -> {
+      log.error("RECORD: recorder TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState());
     });
 
   }
@@ -202,6 +224,12 @@ public class EndpointUtils {
                 ev.getCandidatePair().getRemoteCandidate());
           }
         });
+
+
+    webRtcEp.addMediaTranscodingStateChangeListener(event -> {
+      log.error("RECORD: WEB-RTC EP TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState());
+    });
+
   }
 
   public void addBaseEventListeners(final WebSocketSession session,
@@ -327,7 +355,14 @@ public class EndpointUtils {
   }
 
   public PlayerEndpoint makePlayerEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
-    return null;
+
+    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "rtsp://172.30.0.194:8080/video/h264").build();
+//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://172.30.0.194:8080/video/mjpeg").build();
+//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://172.30.0.194:8080/video").build();
+//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://192.168.178.165:8080/video").build();
+
+    return player;
+
 //      return new RtpEndpoint.Builder(pipeline).build();
   }
 

@@ -19,6 +19,7 @@ package org.kurento.tutorial.rtpreceiver;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.kurento.client.MediaPipeline;
+import org.kurento.client.PlayerEndpoint;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RtpEndpoint;
 import org.kurento.client.WebRtcEndpoint;
@@ -28,6 +29,7 @@ import org.kurento.client.WebRtcEndpoint;
 public class UserSession {
   private MediaPipeline mediaPipeline;
   private RtpEndpoint rtpEp;
+  private PlayerEndpoint playerEp;
   private RecorderEndpoint recorder;
   private WebRtcEndpoint webRtcEp;
 }

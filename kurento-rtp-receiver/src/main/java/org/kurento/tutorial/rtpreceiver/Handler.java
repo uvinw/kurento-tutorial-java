@@ -26,6 +26,7 @@ import org.kurento.client.MediaPipeline;
 import org.kurento.client.MediaProfileSpecType;
 import org.kurento.client.MediaType;
 import org.kurento.client.OnKeySoftLimitEvent;
+import org.kurento.client.PlayerEndpoint;
 import org.kurento.client.RecorderEndpoint;
 import org.kurento.client.RtpEndpoint;
 import org.kurento.client.WebRtcEndpoint;
@@ -57,8 +58,10 @@ public class Handler extends TextWebSocketHandler {
 
   private final ConcurrentHashMap<String, UserSession> users = new ConcurrentHashMap<>();
 
-  private static final String RECORDER_BASE_FILE_PATH = "file:///mnt/c/Users/uvin.withana/Videos/";
-  private static final String RECORDER_FILE_EXT = "-video.mp4";
+  private static final String RECORDER_BASE_FILE_PATH = "file:///tmp/";
+//private static final String RECORDER_BASE_FILE_PATH = "file:///mnt/c/Users/uvin.withana/Videos/";
+  //  private static final String RECORDER_FILE_EXT = "newvideo.mp4";
+  private static final String RECORDER_FILE_EXT = "newvideo.mp4";
 
   private EndpointUtils endpointUtils = new EndpointUtils();
 
@@ -125,7 +128,7 @@ public class Handler extends TextWebSocketHandler {
 
   private String getRandomFileName() {
     String fileName = RandomStringUtils.randomAlphanumeric(10);
-    return RECORDER_BASE_FILE_PATH + fileName + RECORDER_FILE_EXT;
+    return RECORDER_BASE_FILE_PATH + RECORDER_FILE_EXT;
   }
 
 
@@ -383,47 +386,53 @@ Some default values are defined by different RFCs:
     final MediaPipeline pipeline = kurento.createMediaPipeline();
     user.setMediaPipeline(pipeline);
 
+    Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
+    final PlayerEndpoint playerEp = endpointUtils.makePlayerEndpoint(pipeline, useSrtp);
 
     RecorderEndpoint recorder = new RecorderEndpoint.Builder(pipeline, getRandomFileName())
         .withMediaProfile(MediaProfileSpecType.MP4).build();
     final WebRtcEndpoint webRtcEp = new WebRtcEndpoint.Builder(pipeline).build();
     user.setWebRtcEp(webRtcEp);
 
-    endpointUtils.addRecorderListeners(recorder);
+    webRtcEp.setMaxOutputBitrate(200);
+    webRtcEp.setMaxAudioRecvBandwidth(1000);
+//    webRtcEp.setMinVideoSendBandwidth(100);
+//    rtpEp.setMaxVideoSendBandwidth(0);
+//    rtpEp.setMaxOutputBitrate(0);
+//    rtpEp.setMinOutputBitrate(0);
+//    rtpEp.setMaxAudioRecvBandwidth(0);
+//    rtpEp.setMaxAudioRecvBandwidth(0);
+//    rtpEp.setMaxVideoSendBandwidth(0);
+//    rtpEp.setMaxVideoRecvBandwidth(0);
+//    rtpEp.setMinVideoRecvBandwidth(0);
+//    rtpEp.setMinVideoSendBandwidth(0);
+    playerEp.setMaxOutputBitrate(0);
+//    playerEp.setMinOutputBitrate(3000);
+    recorder.setMaxOutputBitrate(0);
+//    recorder.setMinOutputBitrate(3000);
+
+    // ---- Endpoint configuration
 
 
-    Boolean useSrtp = jsonMessage.get("useSrtp").getAsBoolean();
-
-//    final PlayerEndpoint playerEp = endpointUtils.makePlayerEndpoint(pipeline, useSrtp);
-    final RtpEndpoint rtpEp = endpointUtils.makeRtpEndpoint(pipeline, useSrtp);
-    user.setRtpEp(rtpEp);
+//    final RtpEndpoint rtpEp = endpointUtils.makeRtpEndpoint(pipeline, useSrtp);
+//    user.setRtpEp(rtpEp);
+    user.setPlayerEp(playerEp);
     user.setRecorder(recorder);
-
-    endpointUtils.addRtpListeners(rtpEp);
+//    endpointUtils.addRtpListeners(rtpEp);
+    endpointUtils.addPlayerListeners(playerEp);
+    endpointUtils.addRecorderListeners(recorder);
     endpointUtils.addWebRtpListeners(webRtcEp);
 
-    webRtcEp.setMaxOutputBitrate(0);
-    webRtcEp.setMaxAudioRecvBandwidth(0);
-    recorder.setMaxOutputBitrate(0);
-    rtpEp.setMaxVideoSendBandwidth(0);
-    rtpEp.setMaxOutputBitrate(0);
+    playerEp.connect(webRtcEp);
+    playerEp.connect(recorder, MediaType.VIDEO);
+    playerEp.connect(recorder, MediaType.AUDIO);
+//    playerEp.connect(recorder);
 
-    rtpEp.setMinOutputBitrate(0);
-    rtpEp.setMaxAudioRecvBandwidth(0);
 
-    rtpEp.setMaxAudioRecvBandwidth(0);
-    rtpEp.setMaxVideoSendBandwidth(0);
-    rtpEp.setMaxVideoRecvBandwidth(0);
-    rtpEp.setMinVideoRecvBandwidth(0);
-    rtpEp.setMinVideoSendBandwidth(0);
-
-    recorder.setMaxOutputBitrate(0);
-    recorder.setMinOutputBitrate(0);
-    // ---- Endpoint configuration
-    rtpEp.connect(recorder, MediaType.VIDEO);
-    rtpEp.connect(recorder, MediaType.AUDIO);
     //todo: uncomment this
-    rtpEp.connect(webRtcEp);
+//    rtpEp.connect(recorder, MediaType.VIDEO);
+//    rtpEp.connect(recorder, MediaType.AUDIO);
+//    rtpEp.connect(webRtcEp);
 
     //todo: temp code for connecting all webrtc endpoints to the same RTP sink
 //    if (users.keySet().size() == 4) {
@@ -437,8 +446,8 @@ Some default values are defined by different RFCs:
     endpointUtils.initWebRtcEndpoint(session, webRtcEp, sdpOffer);
     endpointUtils.startWebRtcEndpoint(webRtcEp);
 
-    Boolean useComedia = jsonMessage.get("useComedia").getAsBoolean();
-    startRtpEndpoint(session, rtpEp, useComedia, useSrtp);
+//    Boolean useComedia = jsonMessage.get("useComedia").getAsBoolean();
+//    startRtpEndpoint(session, rtpEp, useComedia, useSrtp);
 
 
     // ---- Debug
@@ -448,6 +457,15 @@ Some default values are defined by different RFCs:
     } catch (IOException ex) {
       log.error("[Handler::start] Exception: {}", ex.getMessage());
     }
+
+    try {
+      Thread.sleep(3000);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+    playerEp.play();
+
+
   }
 
 
