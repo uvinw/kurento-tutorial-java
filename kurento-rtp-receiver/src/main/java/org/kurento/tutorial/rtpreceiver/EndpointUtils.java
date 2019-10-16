@@ -57,7 +57,7 @@ public class EndpointUtils {
     rtpEp.addMediaFlowInStateChangeListener(new EventListener<MediaFlowInStateChangeEvent>() {
       @Override
       public void onEvent(MediaFlowInStateChangeEvent event) {
-        log.error("RECORD: RTP sink flow in state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
+        log.info("RECORD: RTP sink flow in state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
 
       }
     });
@@ -86,7 +86,7 @@ public class EndpointUtils {
     playerEp.addMediaFlowInStateChangeListener(new EventListener<MediaFlowInStateChangeEvent>() {
       @Override
       public void onEvent(MediaFlowInStateChangeEvent event) {
-        log.error("RECORD: Player sink flow in state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
+        log.info("RECORD: Player sink flow in state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
         log.info("RECORD: Player max output bit rate: " + playerEp.getMaxOutputBitrate());
         log.info("RECORD: Player min output bit rate: " + playerEp.getMinOutputBitrate());
       }
@@ -97,14 +97,14 @@ public class EndpointUtils {
     });
 
     playerEp.addMediaFlowOutStateChangeListener(event -> {
-      log.error("RECORD: Player sink flow out state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
+      log.info("RECORD: Player sink flow out state change: " + event.getType() + "::" + event.getPadName() + ":: " + event.getMediaType() + ":: " + event.getState());
     });
     playerEp.addElementConnectedListener(event -> {
-      log.error("RECORD: Player sink element connected: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getSinkMediaDescription());
+      log.info("RECORD: Player sink element connected: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getSinkMediaDescription());
     });
 
     playerEp.addMediaTranscodingStateChangeListener(event -> {
-      log.error("RECORD: Player TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState() + "::" + event.getBinName());
+      log.info("RECORD: Player TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState() + "::" + event.getBinName());
     });
   }
 
@@ -138,12 +138,12 @@ public class EndpointUtils {
     recorder.addErrorListener(new EventListener<ErrorEvent>() {
       @Override
       public void onEvent(ErrorEvent event) {
-        log.error("error in recorder: " + event.getType() + "::" + event.getDescription() + ":: " + event.getErrorCode());
+        log.info("error in recorder: " + event.getType() + "::" + event.getDescription() + ":: " + event.getErrorCode());
       }
     });
 
     recorder.addMediaTranscodingStateChangeListener(event -> {
-      log.error("RECORD: recorder TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState());
+      log.info("RECORD: recorder TRANSCODING: " + event.getType() + "::" + event.getMediaType() + ":: " + event.getState());
     });
 
   }
@@ -356,9 +356,11 @@ public class EndpointUtils {
 
   public PlayerEndpoint makePlayerEndpoint(MediaPipeline pipeline, Boolean useSrtp) {
 
+//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "rtsp://localhost:5004/").build();
     PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "rtsp://172.30.0.194:8080/video/h264").build();
-//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://172.30.0.194:8080/video/mjpeg").build();
 //    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://172.30.0.194:8080/video").build();
+
+//    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://172.30.0.194:8080/video/mjpeg").build();
 //    PlayerEndpoint player = new PlayerEndpoint.Builder(pipeline, "http://192.168.178.165:8080/video").build();
 
     return player;

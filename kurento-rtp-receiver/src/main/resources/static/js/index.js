@@ -249,8 +249,8 @@ function addNewVideoSetup() {
   video.autoplay = true;
   video.setAttribute('autoplay', '');
   video.setAttribute('playsinline', '');
-  video.setAttribute('width', '480');
-  video.setAttribute('height', '360');
+  video.setAttribute('width', '1920');
+  video.setAttribute('height', '1080');
   // video.setAttribute('poster', '/img/webrtc.png');
 
   let videoDiv = document.getElementById('videoBig');

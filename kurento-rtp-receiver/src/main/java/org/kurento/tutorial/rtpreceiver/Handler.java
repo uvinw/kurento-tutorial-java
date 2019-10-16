@@ -58,13 +58,12 @@ public class Handler extends TextWebSocketHandler {
 
   private final ConcurrentHashMap<String, UserSession> users = new ConcurrentHashMap<>();
 
-  private static final String RECORDER_BASE_FILE_PATH = "file:///tmp/";
-//private static final String RECORDER_BASE_FILE_PATH = "file:///mnt/c/Users/uvin.withana/Videos/";
+    private static final String RECORDER_BASE_FILE_PATH = "file:///tmp/";
+//  private static final String RECORDER_BASE_FILE_PATH = "file:///mnt/c/Users/uvin.withana/Videos/";
   //  private static final String RECORDER_FILE_EXT = "newvideo.mp4";
-  private static final String RECORDER_FILE_EXT = "newvideo.mp4";
+  private static final String RECORDER_FILE_EXT = "newvideo-wed.mp4";
 
   private EndpointUtils endpointUtils = new EndpointUtils();
-
 
   @Autowired
   private KurentoClient kurento;
@@ -394,8 +393,24 @@ Some default values are defined by different RFCs:
     final WebRtcEndpoint webRtcEp = new WebRtcEndpoint.Builder(pipeline).build();
     user.setWebRtcEp(webRtcEp);
 
-    webRtcEp.setMaxOutputBitrate(200);
-    webRtcEp.setMaxAudioRecvBandwidth(1000);
+
+    playerEp.setMaxOutputBitrate(0);
+    playerEp.setMinOutputBitrate(300000);
+
+    recorder.setMaxOutputBitrate(0);
+    recorder.setMinOutputBitrate(300000);
+
+    webRtcEp.setMaxOutputBitrate(0);
+    webRtcEp.setMinOutputBitrate(300000);
+
+    webRtcEp.setMaxAudioRecvBandwidth(0);
+
+    webRtcEp.setMaxVideoRecvBandwidth(0);
+    webRtcEp.setMinVideoRecvBandwidth(300000);
+
+    webRtcEp.setMaxVideoSendBandwidth(0);
+    webRtcEp.setMinVideoSendBandwidth(300000);
+
 //    webRtcEp.setMinVideoSendBandwidth(100);
 //    rtpEp.setMaxVideoSendBandwidth(0);
 //    rtpEp.setMaxOutputBitrate(0);
@@ -406,10 +421,7 @@ Some default values are defined by different RFCs:
 //    rtpEp.setMaxVideoRecvBandwidth(0);
 //    rtpEp.setMinVideoRecvBandwidth(0);
 //    rtpEp.setMinVideoSendBandwidth(0);
-    playerEp.setMaxOutputBitrate(0);
-//    playerEp.setMinOutputBitrate(3000);
-    recorder.setMaxOutputBitrate(0);
-//    recorder.setMinOutputBitrate(3000);
+
 
     // ---- Endpoint configuration
 
@@ -423,9 +435,9 @@ Some default values are defined by different RFCs:
     endpointUtils.addRecorderListeners(recorder);
     endpointUtils.addWebRtpListeners(webRtcEp);
 
-    playerEp.connect(webRtcEp);
     playerEp.connect(recorder, MediaType.VIDEO);
     playerEp.connect(recorder, MediaType.AUDIO);
+    playerEp.connect(webRtcEp);
 //    playerEp.connect(recorder);
 
 
@@ -459,7 +471,7 @@ Some default values are defined by different RFCs:
     }
 
     try {
-      Thread.sleep(3000);
+      Thread.sleep(5000);
     } catch (InterruptedException e) {
       e.printStackTrace();
     }
